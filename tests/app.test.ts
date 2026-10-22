@@ -23,3 +23,25 @@ describe("GET /health", () => {
     });
   });
 });
+
+it("returns 400 for malformed JSON", async () => {
+  const response = await request(app)
+    .post("/api/v1/auth/register")
+    .set("Content-Type", "application/json")
+    .send('{"email":');
+
+  expect(response.status).toBe(400);
+  expect(response.body.error.code).toBe("INVALID_JSON");
+});
+
+it("returns a consistent 404 for an unknown route", async () => {
+  const response = await request(app).get("/route-that-does-not-exist");
+
+  expect(response.status).toBe(404);
+  expect(response.body).toEqual({
+    error: {
+      code: "NOT_FOUND",
+      message: "Route not found: GET /route-that-does-not-exist",
+    },
+  });
+});

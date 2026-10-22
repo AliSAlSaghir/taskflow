@@ -1,10 +1,17 @@
 import express from "express";
+import helmet from "helmet";
+import cookieParser from "cookie-parser";
 import { prisma } from "../infrastructure/database/prisma.js";
+import { authRouter } from "../modules/auth/auth.routes.js";
+import { errorHandler } from "./error-handler.js";
+import { notFoundHandler } from "./not-found.js";
 
 const app = express();
 
 app.disable("x-powered-by");
-app.use(express.json());
+app.use(helmet());
+app.use(express.json({ limit: "16kb" }));
+app.use(cookieParser());
 
 app.get("/health", (_req, res) => {
   res.status(200).json({
@@ -26,5 +33,10 @@ app.get("/health/ready", async (_req, res) => {
     });
   }
 });
+
+app.use("/api/v1/auth", authRouter);
+
+app.use(errorHandler);
+app.use(notFoundHandler);
 
 export { app };
