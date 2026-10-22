@@ -11,6 +11,8 @@ const envSchema = z
 
     DATABASE_URL: z.url().startsWith("postgresql://"),
 
+    ACCESS_TOKEN_SECRET: z.string().min(43),
+
     DATABASE_URL_TEST: z.url().startsWith("postgresql://").optional(),
 
     ALLOW_DEMO_SEED: z

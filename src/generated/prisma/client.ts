@@ -51,3 +51,13 @@ export type User = Prisma.UserModel
  * 
  */
 export type Profile = Prisma.ProfileModel
+/**
+ * Model AuthSession
+ * 
+ */
+export type AuthSession = Prisma.AuthSessionModel
+/**
+ * Model RefreshToken
+ * 
+ */
+export type RefreshToken = Prisma.RefreshTokenModel

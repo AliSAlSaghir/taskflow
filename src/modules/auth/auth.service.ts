@@ -1,7 +1,7 @@
 import argon2 from "argon2";
 import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../../infrastructure/database/prisma.js";
-import type { RegisterInput } from "./auth.schema.js";
+import type { LoginInput, RegisterInput } from "./auth.schema.js";
 import { EmailAlreadyRegisteredError } from "./auth.errors.js";
 
 export async function registerUser(input: RegisterInput) {
@@ -47,4 +47,48 @@ export async function registerUser(input: RegisterInput) {
 
     throw error;
   }
+}
+
+export async function loginUser(input: LoginInput) {
+  const user = await prisma.user.findFirst({
+    where: {
+      email: {
+        equals: input.email,
+        mode: "insensitive",
+      },
+      status: "ACTIVE",
+    },
+    select: {
+      id: true,
+      email: true,
+      passwordHash: true,
+      role: true,
+      status: true,
+      createdAt: true,
+      profile: {
+        select: {
+          displayName: true,
+          bio: true,
+          profilePictureKey: true,
+        },
+      },
+    },
+  });
+
+  if (!user) {
+    return null;
+  }
+
+  const passwordIsValid = await argon2.verify(
+    user.passwordHash,
+    input.password,
+  );
+
+  if (!passwordIsValid) {
+    return null;
+  }
+
+  const { passwordHash: _passwordHash, ...safeUser } = user;
+
+  return safeUser;
 }
