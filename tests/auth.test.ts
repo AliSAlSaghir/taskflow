@@ -562,3 +562,59 @@ describe("POST /api/v1/auth/refresh", () => {
     ).toBe(true);
   });
 });
+
+describe("POST /api/v1/auth/logout", () => {
+  it("revokes the session, invalidates both tokens, and clears cookies", async () => {
+    const loggedIn = await createLoggedInUser("logout");
+
+    const response = await request(app)
+      .post("/api/v1/auth/logout")
+      .set("Cookie", loggedIn.accessCookie);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.loggedOut).toBe(true);
+
+    const setCookieHeader = response.headers["set-cookie"];
+    const headers = Array.isArray(setCookieHeader)
+      ? setCookieHeader
+      : setCookieHeader
+        ? [setCookieHeader]
+        : [];
+
+    expect(headers).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("access_token=;"),
+        expect.stringContaining("refresh_token=;"),
+      ]),
+    );
+
+    const session = await prisma.authSession.findFirstOrThrow({
+      where: { userId: loggedIn.userId },
+      include: { refreshTokens: true },
+    });
+
+    expect(session.revokedAt).not.toBeNull();
+    expect(
+      session.refreshTokens.every((token) => token.revokedAt !== null),
+    ).toBe(true);
+
+    const meResponse = await request(app)
+      .get("/api/v1/auth/me")
+      .set("Cookie", loggedIn.accessCookie);
+
+    expect(meResponse.status).toBe(401);
+
+    const refreshResponse = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", loggedIn.refreshCookie);
+
+    expect(refreshResponse.status).toBe(401);
+  });
+
+  it("rejects logout without authentication", async () => {
+    const response = await request(app).post("/api/v1/auth/logout");
+
+    expect(response.status).toBe(401);
+    expect(response.body.error.code).toBe("UNAUTHENTICATED");
+  });
+});

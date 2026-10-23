@@ -36,7 +36,7 @@ app.get("/health/ready", async (_req, res) => {
 
 app.use("/api/v1/auth", authRouter);
 
-app.use(errorHandler);
 app.use(notFoundHandler);
+app.use(errorHandler);
 
 export { app };

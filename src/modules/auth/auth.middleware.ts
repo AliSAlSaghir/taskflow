@@ -58,7 +58,10 @@ export const requireAuth: RequestHandler = async (req, res, next) => {
       return;
     }
 
-    res.locals.user = { id: user.id };
+    res.locals.user = {
+      id: user.id,
+      sessionId: session.id,
+    };
     next();
   } catch (error: unknown) {
     next(error);

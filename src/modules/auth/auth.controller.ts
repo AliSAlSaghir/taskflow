@@ -8,7 +8,11 @@ import {
   ACCESS_TOKEN_LIFETIME_SECONDS,
   REFRESH_TOKEN_LIFETIME_MS,
 } from "./auth.constants.js";
-import { createAuthSession, rotateRefreshToken } from "./session.service.js";
+import {
+  createAuthSession,
+  revokeAuthSession,
+  rotateRefreshToken,
+} from "./session.service.js";
 
 export async function register(
   req: Request,
@@ -172,6 +176,34 @@ export async function refresh(req: Request, res: Response, next: NextFunction) {
 
     return res.status(200).json({
       data: { refreshed: true },
+    });
+  } catch (error: unknown) {
+    return next(error);
+  }
+}
+
+export async function logout(_req: Request, res: Response, next: NextFunction) {
+  const cookieOptions = {
+    httpOnly: true,
+    secure: env.NODE_ENV === "production",
+    sameSite: "lax" as const,
+  };
+
+  try {
+    await revokeAuthSession(res.locals.user.id, res.locals.user.sessionId);
+
+    res.clearCookie("access_token", {
+      ...cookieOptions,
+      path: "/",
+    });
+
+    res.clearCookie("refresh_token", {
+      ...cookieOptions,
+      path: "/api/v1/auth",
+    });
+
+    return res.status(200).json({
+      data: { loggedOut: true },
     });
   } catch (error: unknown) {
     return next(error);
