@@ -8,7 +8,7 @@ import {
   ACCESS_TOKEN_LIFETIME_SECONDS,
   REFRESH_TOKEN_LIFETIME_MS,
 } from "./auth.constants.js";
-import { createAuthSession } from "./session.service.js";
+import { createAuthSession, rotateRefreshToken } from "./session.service.js";
 
 export async function register(
   req: Request,
@@ -101,6 +101,77 @@ export async function login(req: Request, res: Response, next: NextFunction) {
 
     return res.status(200).json({
       data: user,
+    });
+  } catch (error: unknown) {
+    return next(error);
+  }
+}
+
+export async function refresh(req: Request, res: Response, next: NextFunction) {
+  const rawToken = req.cookies?.refresh_token;
+
+  const cookieOptions = {
+    httpOnly: true,
+    secure: env.NODE_ENV === "production",
+    sameSite: "lax" as const,
+  };
+
+  const clearAuthCookies = () => {
+    res.clearCookie("access_token", {
+      ...cookieOptions,
+      path: "/",
+    });
+
+    res.clearCookie("refresh_token", {
+      ...cookieOptions,
+      path: "/api/v1/auth",
+    });
+  };
+
+  if (typeof rawToken !== "string" || rawToken.length === 0) {
+    clearAuthCookies();
+
+    return res.status(401).json({
+      error: {
+        code: "INVALID_REFRESH_TOKEN",
+        message: "A valid refresh token is required.",
+      },
+    });
+  }
+
+  try {
+    const result = await rotateRefreshToken(rawToken);
+
+    if (result.kind !== "rotated") {
+      clearAuthCookies();
+
+      return res.status(401).json({
+        error: {
+          code: "INVALID_REFRESH_TOKEN",
+          message: "A valid refresh token is required.",
+        },
+      });
+    }
+
+    const accessToken = await createAccessToken(
+      result.userId,
+      result.sessionId,
+    );
+
+    res.cookie("access_token", accessToken, {
+      ...cookieOptions,
+      path: "/",
+      maxAge: ACCESS_TOKEN_LIFETIME_SECONDS * 1000,
+    });
+
+    res.cookie("refresh_token", result.refreshToken, {
+      ...cookieOptions,
+      path: "/api/v1/auth",
+      maxAge: REFRESH_TOKEN_LIFETIME_MS,
+    });
+
+    return res.status(200).json({
+      data: { refreshed: true },
     });
   } catch (error: unknown) {
     return next(error);

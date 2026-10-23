@@ -4,6 +4,7 @@ import request from "supertest";
 import { afterEach, describe, expect, it } from "vitest";
 import { app } from "../src/app/app.js";
 import { prisma } from "../src/infrastructure/database/prisma.js";
+import { hashRefreshToken } from "../src/modules/auth/refresh-token.service.js";
 
 const emailsToClean: string[] = [];
 
@@ -42,6 +43,65 @@ afterEach(async () => {
 
   emailsToClean.length = 0;
 });
+
+function getCookiePair(headers: unknown, name: string): string | undefined {
+  if (!Array.isArray(headers)) {
+    return undefined;
+  }
+
+  return headers
+    .find(
+      (header): header is string =>
+        typeof header === "string" && header.startsWith(`${name}=`),
+    )
+    ?.split(";")[0];
+}
+
+async function createLoggedInUser(prefix: string) {
+  const email = `${prefix}-${randomUUID()}@example.com`;
+  const password = "A-Strong-Test-Password-123!";
+
+  emailsToClean.push(email);
+
+  const registration = await request(app).post("/api/v1/auth/register").send({
+    email,
+    password,
+    displayName: "Refresh Test",
+  });
+
+  expect(registration.status).toBe(201);
+
+  const login = await request(app)
+    .post("/api/v1/auth/login")
+    .send({ email, password });
+
+  expect(login.status).toBe(200);
+
+  const setCookieHeader = login.headers["set-cookie"];
+  const headers = Array.isArray(setCookieHeader)
+    ? setCookieHeader
+    : setCookieHeader
+      ? [setCookieHeader]
+      : undefined;
+  const accessCookie = getCookiePair(headers, "access_token");
+  const refreshCookie = getCookiePair(headers, "refresh_token");
+
+  expect(accessCookie).toBeDefined();
+  expect(refreshCookie).toBeDefined();
+
+  const user = await prisma.user.findUniqueOrThrow({
+    where: { email },
+    select: { id: true },
+  });
+
+  return {
+    email,
+    userId: user.id,
+    accessCookie: accessCookie!,
+    refreshCookie: refreshCookie!,
+    rawRefreshToken: refreshCookie!.slice("refresh_token=".length),
+  };
+}
 
 describe("POST /api/v1/auth/register", () => {
   it("creates a user and profile without exposing the password hash", async () => {
@@ -324,5 +384,181 @@ describe("POST /api/v1/auth/login", () => {
 
     expect(response.status).toBe(401);
     expect(response.body.error.code).toBe("UNAUTHENTICATED");
+  });
+});
+
+describe("POST /api/v1/auth/refresh", () => {
+  it("rotates the refresh token and issues a working access token", async () => {
+    const loggedIn = await createLoggedInUser("refresh");
+
+    const oldTokenHash = hashRefreshToken(loggedIn.rawRefreshToken);
+
+    const response = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", loggedIn.refreshCookie);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.refreshed).toBe(true);
+
+    const setCookieHeader = response.headers["set-cookie"];
+    const headers = Array.isArray(setCookieHeader)
+      ? setCookieHeader
+      : setCookieHeader
+        ? [setCookieHeader]
+        : undefined;
+    const newAccessCookie = getCookiePair(headers, "access_token");
+    const newRefreshCookie = getCookiePair(headers, "refresh_token");
+
+    expect(newAccessCookie).toBeDefined();
+    expect(newRefreshCookie).toBeDefined();
+    expect(newRefreshCookie).not.toBe(loggedIn.refreshCookie);
+
+    const oldToken = await prisma.refreshToken.findUniqueOrThrow({
+      where: { tokenHash: oldTokenHash },
+    });
+
+    expect(oldToken.revokedAt).not.toBeNull();
+    expect(oldToken.replacedBy).not.toBeNull();
+
+    const newRawToken = newRefreshCookie!.slice("refresh_token=".length);
+
+    const newToken = await prisma.refreshToken.findUnique({
+      where: { tokenHash: hashRefreshToken(newRawToken) },
+    });
+
+    expect(newToken).not.toBeNull();
+    expect(newToken!.revokedAt).toBeNull();
+
+    const meResponse = await request(app)
+      .get("/api/v1/auth/me")
+      .set("Cookie", newAccessCookie!);
+
+    expect(meResponse.status).toBe(200);
+    expect(meResponse.body.data.userId).toBe(loggedIn.userId);
+  });
+
+  it("revokes the session when an already-rotated token is reused", async () => {
+    const loggedIn = await createLoggedInUser("reuse");
+
+    const firstRefresh = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", loggedIn.refreshCookie);
+
+    expect(firstRefresh.status).toBe(200);
+
+    const secondRefresh = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", loggedIn.refreshCookie);
+
+    expect(secondRefresh.status).toBe(401);
+    expect(secondRefresh.body.error.code).toBe("INVALID_REFRESH_TOKEN");
+
+    const session = await prisma.authSession.findFirstOrThrow({
+      where: { userId: loggedIn.userId },
+    });
+
+    expect(session.revokedAt).not.toBeNull();
+
+    const sessionTokens = await prisma.refreshToken.findMany({
+      where: { sessionId: session.id },
+    });
+
+    expect(sessionTokens.length).toBeGreaterThanOrEqual(2);
+    expect(sessionTokens.every((token) => token.revokedAt !== null)).toBe(true);
+
+    const meResponse = await request(app)
+      .get("/api/v1/auth/me")
+      .set("Cookie", loggedIn.accessCookie);
+
+    expect(meResponse.status).toBe(401);
+  });
+
+  it("rejects a random refresh token", async () => {
+    const response = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", "refresh_token=not-a-real-token");
+
+    expect(response.status).toBe(401);
+    expect(response.body.error.code).toBe("INVALID_REFRESH_TOKEN");
+  });
+
+  it("rejects a missing refresh token", async () => {
+    const response = await request(app).post("/api/v1/auth/refresh");
+
+    expect(response.status).toBe(401);
+    expect(response.body.error.code).toBe("INVALID_REFRESH_TOKEN");
+  });
+
+  it("rejects refresh tokens belonging to disabled accounts", async () => {
+    const loggedIn = await createLoggedInUser("disabled-refresh");
+
+    await prisma.user.update({
+      where: { id: loggedIn.userId },
+      data: { status: "DISABLED" },
+    });
+
+    const response = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", loggedIn.refreshCookie);
+
+    expect(response.status).toBe(401);
+    expect(response.body.error.code).toBe("INVALID_REFRESH_TOKEN");
+
+    const session = await prisma.authSession.findFirstOrThrow({
+      where: { userId: loggedIn.userId },
+    });
+
+    expect(session.revokedAt).not.toBeNull();
+  });
+
+  it("rejects an expired refresh token", async () => {
+    const loggedIn = await createLoggedInUser("expired-refresh");
+
+    await prisma.refreshToken.update({
+      where: {
+        tokenHash: hashRefreshToken(loggedIn.rawRefreshToken),
+      },
+      data: {
+        expiresAt: new Date(Date.now() - 60_000),
+      },
+    });
+
+    const response = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", loggedIn.refreshCookie);
+
+    expect(response.status).toBe(401);
+    expect(response.body.error.code).toBe("INVALID_REFRESH_TOKEN");
+  });
+  it("revokes the session when the same refresh token is used concurrently", async () => {
+    const loggedIn = await createLoggedInUser("concurrent-refresh");
+
+    const responses = await Promise.all([
+      request(app)
+        .post("/api/v1/auth/refresh")
+        .set("Cookie", loggedIn.refreshCookie),
+      request(app)
+        .post("/api/v1/auth/refresh")
+        .set("Cookie", loggedIn.refreshCookie),
+    ]);
+
+    expect(responses.map((response) => response.status).sort()).toEqual([
+      200, 401,
+    ]);
+
+    const session = await prisma.authSession.findFirstOrThrow({
+      where: { userId: loggedIn.userId },
+      select: {
+        revokedAt: true,
+        refreshTokens: {
+          select: { revokedAt: true },
+        },
+      },
+    });
+
+    expect(session.revokedAt).not.toBeNull();
+    expect(
+      session.refreshTokens.every((token) => token.revokedAt !== null),
+    ).toBe(true);
   });
 });
