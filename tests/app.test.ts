@@ -41,7 +41,7 @@ it("returns a consistent 404 for an unknown route", async () => {
   expect(response.body).toEqual({
     error: {
       code: "NOT_FOUND",
-      message: "Route not found: GET /route-that-does-not-exist",
+      message: "The requested resource was not found.",
     },
   });
 });
