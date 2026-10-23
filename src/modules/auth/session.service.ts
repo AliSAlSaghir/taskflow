@@ -225,3 +225,31 @@ export async function revokeAuthSession(
     });
   });
 }
+
+export async function revokeAllAuthSessions(userId: string): Promise<void> {
+  const now = new Date();
+
+  await prisma.$transaction(async (tx) => {
+    await tx.authSession.updateMany({
+      where: {
+        userId,
+        revokedAt: null,
+      },
+      data: {
+        revokedAt: now,
+      },
+    });
+
+    await tx.refreshToken.updateMany({
+      where: {
+        session: {
+          userId,
+        },
+        revokedAt: null,
+      },
+      data: {
+        revokedAt: now,
+      },
+    });
+  });
+}

@@ -10,6 +10,7 @@ import {
 } from "./auth.constants.js";
 import {
   createAuthSession,
+  revokeAllAuthSessions,
   revokeAuthSession,
   rotateRefreshToken,
 } from "./session.service.js";
@@ -204,6 +205,38 @@ export async function logout(_req: Request, res: Response, next: NextFunction) {
 
     return res.status(200).json({
       data: { loggedOut: true },
+    });
+  } catch (error: unknown) {
+    return next(error);
+  }
+}
+
+export async function logoutAll(
+  _req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  const cookieOptions = {
+    httpOnly: true,
+    secure: env.NODE_ENV === "production",
+    sameSite: "lax" as const,
+  };
+
+  try {
+    await revokeAllAuthSessions(res.locals.user.id);
+
+    res.clearCookie("access_token", {
+      ...cookieOptions,
+      path: "/",
+    });
+
+    res.clearCookie("refresh_token", {
+      ...cookieOptions,
+      path: "/api/v1/auth",
+    });
+
+    return res.status(200).json({
+      data: { loggedOut: true, allSessionsRevoked: true },
     });
   } catch (error: unknown) {
     return next(error);

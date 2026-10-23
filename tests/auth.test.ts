@@ -618,3 +618,111 @@ describe("POST /api/v1/auth/logout", () => {
     expect(response.body.error.code).toBe("UNAUTHENTICATED");
   });
 });
+
+describe("POST /api/v1/auth/logout-all", () => {
+  it("revokes all sessions belonging to the authenticated user", async () => {
+    const firstLogin = await createLoggedInUser("logout-all");
+
+    // Log in again to create a second session for the same user.
+    const secondLogin = await request(app).post("/api/v1/auth/login").send({
+      email: firstLogin.email,
+      password: "A-Strong-Test-Password-123!",
+    });
+
+    expect(secondLogin.status).toBe(200);
+
+    const secondHeaders = Array.isArray(secondLogin.headers["set-cookie"])
+      ? secondLogin.headers["set-cookie"]
+      : [];
+
+    const secondAccessCookie = getCookiePair(secondHeaders, "access_token");
+    const secondRefreshCookie = getCookiePair(secondHeaders, "refresh_token");
+
+    expect(secondAccessCookie).toBeDefined();
+    expect(secondRefreshCookie).toBeDefined();
+
+    const response = await request(app)
+      .post("/api/v1/auth/logout-all")
+      .set("Cookie", firstLogin.accessCookie);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toEqual({
+      loggedOut: true,
+      allSessionsRevoked: true,
+    });
+
+    const sessions = await prisma.authSession.findMany({
+      where: { userId: firstLogin.userId },
+      include: { refreshTokens: true },
+    });
+
+    expect(sessions).toHaveLength(2);
+    expect(sessions.every((session) => session.revokedAt !== null)).toBe(true);
+
+    for (const session of sessions) {
+      expect(
+        session.refreshTokens.every((token) => token.revokedAt !== null),
+      ).toBe(true);
+    }
+
+    // Access tokens from both sessions must stop working.
+    const firstMeResponse = await request(app)
+      .get("/api/v1/auth/me")
+      .set("Cookie", firstLogin.accessCookie);
+
+    const secondMeResponse = await request(app)
+      .get("/api/v1/auth/me")
+      .set("Cookie", secondAccessCookie!);
+
+    expect(firstMeResponse.status).toBe(401);
+    expect(secondMeResponse.status).toBe(401);
+
+    // Both sessions' refresh tokens must stop working.
+    const firstRefreshResponse = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", firstLogin.refreshCookie);
+
+    const secondRefreshResponse = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", secondRefreshCookie!);
+
+    expect(firstRefreshResponse.status).toBe(401);
+    expect(secondRefreshResponse.status).toBe(401);
+  });
+
+  it("does not revoke another user's sessions", async () => {
+    const firstUser = await createLoggedInUser("logout-all-owner");
+    const secondUser = await createLoggedInUser("logout-all-other");
+
+    const response = await request(app)
+      .post("/api/v1/auth/logout-all")
+      .set("Cookie", firstUser.accessCookie);
+
+    expect(response.status).toBe(200);
+
+    const otherSession = await prisma.authSession.findFirstOrThrow({
+      where: { userId: secondUser.userId },
+    });
+
+    expect(otherSession.revokedAt).toBeNull();
+
+    const otherMeResponse = await request(app)
+      .get("/api/v1/auth/me")
+      .set("Cookie", secondUser.accessCookie);
+
+    expect(otherMeResponse.status).toBe(200);
+
+    const otherRefreshResponse = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", secondUser.refreshCookie);
+
+    expect(otherRefreshResponse.status).toBe(200);
+  });
+
+  it("rejects logout-all without authentication", async () => {
+    const response = await request(app).post("/api/v1/auth/logout-all");
+
+    expect(response.status).toBe(401);
+    expect(response.body.error.code).toBe("UNAUTHENTICATED");
+  });
+});
