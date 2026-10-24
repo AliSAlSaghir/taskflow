@@ -3,6 +3,7 @@ import { prisma } from "../../infrastructure/database/prisma.js";
 import {
   MemberNotEligibleError,
   MembershipAlreadyExistsError,
+  MembershipNotFoundError,
   ProjectNotFoundError,
 } from "./membership.errors.js";
 import type { ListProjectMembersQuery } from "./project.schema.js";
@@ -145,4 +146,45 @@ export async function listProjectMembers(
       totalPages: Math.ceil(totalItems / query.limit),
     },
   };
+}
+
+export async function removeProjectMember(
+  ownerId: string,
+  projectId: string,
+  membershipId: string,
+) {
+  const project = await prisma.project.findFirst({
+    where: {
+      id: projectId,
+      ownerId,
+      archivedAt: null,
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  if (!project) {
+    throw new ProjectNotFoundError();
+  }
+
+  const membership = await prisma.projectMembership.findFirst({
+    where: {
+      id: membershipId,
+      projectId: project.id,
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  if (!membership) {
+    throw new MembershipNotFoundError();
+  }
+
+  await prisma.projectMembership.delete({
+    where: {
+      id: membership.id,
+    },
+  });
 }

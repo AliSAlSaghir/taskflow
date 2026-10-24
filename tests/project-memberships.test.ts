@@ -402,3 +402,155 @@ describe("GET /api/v1/projects/:projectId/members", () => {
     expect(response.status).toBe(400);
   });
 });
+
+describe("DELETE /api/v1/projects/:projectId/members/:membershipId", () => {
+  it("allows the owner to remove a project member", async () => {
+    const owner = await createLoggedInUser();
+    const member = await createLoggedInUser();
+    const project = await createProject(owner.userId);
+
+    const membership = await prisma.projectMembership.create({
+      data: {
+        projectId: project.id,
+        userId: member.userId,
+      },
+    });
+
+    const response = await request(app)
+      .delete(`/api/v1/projects/${project.id}/members/${membership.id}`)
+      .set("Cookie", owner.accessCookie);
+
+    expect(response.status).toBe(204);
+    expect(response.text).toBe("");
+
+    const remainingMembership = await prisma.projectMembership.findUnique({
+      where: { id: membership.id },
+    });
+
+    expect(remainingMembership).toBeNull();
+
+    // Removing membership must not delete the user's account.
+    const remainingUser = await prisma.user.findUnique({
+      where: { id: member.userId },
+    });
+
+    expect(remainingUser).not.toBeNull();
+  });
+
+  it("returns 404 when a non-owner tries to remove a member", async () => {
+    const owner = await createLoggedInUser();
+    const member = await createLoggedInUser();
+    const otherUser = await createLoggedInUser();
+    const project = await createProject(owner.userId);
+
+    const membership = await prisma.projectMembership.create({
+      data: {
+        projectId: project.id,
+        userId: member.userId,
+      },
+    });
+
+    const response = await request(app)
+      .delete(`/api/v1/projects/${project.id}/members/${membership.id}`)
+      .set("Cookie", otherUser.accessCookie);
+
+    expect(response.status).toBe(404);
+
+    const remainingMembership = await prisma.projectMembership.findUnique({
+      where: { id: membership.id },
+    });
+
+    expect(remainingMembership).not.toBeNull();
+  });
+
+  it("returns 404 when the project is archived", async () => {
+    const owner = await createLoggedInUser();
+    const member = await createLoggedInUser();
+    const project = await createProject(owner.userId);
+
+    const membership = await prisma.projectMembership.create({
+      data: {
+        projectId: project.id,
+        userId: member.userId,
+      },
+    });
+
+    await prisma.project.update({
+      where: { id: project.id },
+      data: { archivedAt: new Date() },
+    });
+
+    const response = await request(app)
+      .delete(`/api/v1/projects/${project.id}/members/${membership.id}`)
+      .set("Cookie", owner.accessCookie);
+
+    expect(response.status).toBe(404);
+
+    const remainingMembership = await prisma.projectMembership.findUnique({
+      where: { id: membership.id },
+    });
+
+    expect(remainingMembership).not.toBeNull();
+  });
+
+  it("returns 404 when the membership does not exist", async () => {
+    const owner = await createLoggedInUser();
+    const project = await createProject(owner.userId);
+
+    const response = await request(app)
+      .delete(`/api/v1/projects/${project.id}/members/${randomUUID()}`)
+      .set("Cookie", owner.accessCookie);
+
+    expect(response.status).toBe(404);
+  });
+
+  it("returns 404 when the membership belongs to another project", async () => {
+    const owner = await createLoggedInUser();
+    const member = await createLoggedInUser();
+    const firstProject = await createProject(owner.userId);
+    const secondProject = await createProject(owner.userId);
+
+    const membership = await prisma.projectMembership.create({
+      data: {
+        projectId: firstProject.id,
+        userId: member.userId,
+      },
+    });
+
+    const response = await request(app)
+      .delete(`/api/v1/projects/${secondProject.id}/members/${membership.id}`)
+      .set("Cookie", owner.accessCookie);
+
+    expect(response.status).toBe(404);
+
+    const remainingMembership = await prisma.projectMembership.findUnique({
+      where: { id: membership.id },
+    });
+
+    expect(remainingMembership).not.toBeNull();
+  });
+
+  it("returns 400 when either ID is invalid", async () => {
+    const owner = await createLoggedInUser();
+    const project = await createProject(owner.userId);
+
+    const invalidProjectIdResponse = await request(app)
+      .delete(`/api/v1/projects/not-a-uuid/members/${randomUUID()}`)
+      .set("Cookie", owner.accessCookie);
+
+    const invalidMembershipIdResponse = await request(app)
+      .delete(`/api/v1/projects/${project.id}/members/not-a-uuid`)
+      .set("Cookie", owner.accessCookie);
+
+    expect(invalidProjectIdResponse.status).toBe(400);
+    expect(invalidMembershipIdResponse.status).toBe(400);
+  });
+
+  it("returns 401 when the request is unauthenticated", async () => {
+    const response = await request(app).delete(
+      `/api/v1/projects/${randomUUID()}/members/${randomUUID()}`,
+    );
+
+    expect(response.status).toBe(401);
+  });
+});

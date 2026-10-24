@@ -11,6 +11,7 @@ import {
 import {
   addProjectMemberController,
   listProjectMembersController,
+  removeProjectMemberController,
 } from "./membership.controller.js";
 
 const projectRouter = Router();
@@ -35,6 +36,11 @@ projectRouter.get(
   "/:projectId/members",
   requireAuth,
   listProjectMembersController,
+);
+projectRouter.delete(
+  "/:projectId/members/:membershipId",
+  requireAuth,
+  removeProjectMemberController,
 );
 
 export { projectRouter };

@@ -18,3 +18,10 @@ export class MembershipAlreadyExistsError extends Error {
     this.name = "MembershipAlreadyExistsError";
   }
 }
+
+export class MembershipNotFoundError extends Error {
+  constructor() {
+    super("The requested project membership was not found.");
+    this.name = "MembershipNotFoundError";
+  }
+}

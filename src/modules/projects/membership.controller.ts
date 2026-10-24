@@ -7,9 +7,15 @@ import {
 import {
   MemberNotEligibleError,
   MembershipAlreadyExistsError,
+  MembershipNotFoundError,
   ProjectNotFoundError,
 } from "./membership.errors.js";
-import { addProjectMember, listProjectMembers } from "./membership.service.js";
+
+import {
+  addProjectMember,
+  listProjectMembers,
+  removeProjectMember,
+} from "./membership.service.js";
 
 export const addProjectMemberController: RequestHandler = async (
   req,
@@ -131,6 +137,64 @@ export const listProjectMembersController: RequestHandler = async (
     res.status(200).json(result);
   } catch (error: unknown) {
     if (error instanceof ProjectNotFoundError) {
+      res.status(404).json({
+        error: {
+          code: "NOT_FOUND",
+          message: "The requested resource was not found.",
+        },
+      });
+      return;
+    }
+
+    next(error);
+  }
+};
+
+export const removeProjectMemberController: RequestHandler = async (
+  req,
+  res,
+  next,
+) => {
+  const projectIdResult = projectIdSchema.safeParse(req.params.projectId);
+  const membershipIdResult = projectIdSchema.safeParse(req.params.membershipId);
+
+  if (!projectIdResult.success || !membershipIdResult.success) {
+    res.status(400).json({
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "Request validation failed.",
+        details: [
+          ...(!projectIdResult.success
+            ? projectIdResult.error.issues.map((issue) => ({
+                field: "projectId",
+                message: issue.message,
+              }))
+            : []),
+          ...(!membershipIdResult.success
+            ? membershipIdResult.error.issues.map((issue) => ({
+                field: "membershipId",
+                message: issue.message,
+              }))
+            : []),
+        ],
+      },
+    });
+    return;
+  }
+
+  try {
+    await removeProjectMember(
+      res.locals.user.id,
+      projectIdResult.data,
+      membershipIdResult.data,
+    );
+
+    res.status(204).end();
+  } catch (error: unknown) {
+    if (
+      error instanceof ProjectNotFoundError ||
+      error instanceof MembershipNotFoundError
+    ) {
       res.status(404).json({
         error: {
           code: "NOT_FOUND",
