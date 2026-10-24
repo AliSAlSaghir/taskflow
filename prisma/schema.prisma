@@ -1,4 +1,3 @@
-
 generator client {
   provider            = "prisma-client"
   output              = "../src/generated/prisma"
@@ -11,22 +10,23 @@ datasource db {
 }
 
 model User {
-  id           String   @id @default(uuid()) @db.Uuid
-  email        String   @unique @db.VarChar(254)
-  passwordHash String   @map("password_hash")
-  role         UserRole @default(USER)
+  id           String     @id @default(uuid()) @db.Uuid
+  email        String     @unique @db.VarChar(254)
+  passwordHash String     @map("password_hash")
+  role         UserRole   @default(USER)
   status       UserStatus @default(ACTIVE)
-  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  profile Profile?
-  authSessions AuthSession[]
+  profile       Profile?
+  authSessions  AuthSession[]
+  ownedProjects Project[]
 
   @@map("users")
 }
 
 model Profile {
-  id               String   @id @default(uuid()) @db.Uuid
+  id                String   @id @default(uuid()) @db.Uuid
   userId            String   @unique @map("user_id") @db.Uuid
   displayName       String   @map("display_name") @db.VarChar(80)
   bio               String?  @db.VarChar(500)
@@ -48,7 +48,6 @@ enum UserStatus {
   ACTIVE
   DISABLED
 }
-
 
 model AuthSession {
   id         String    @id @default(uuid()) @db.Uuid
@@ -80,4 +79,19 @@ model RefreshToken {
   @@index([sessionId, revokedAt])
   @@index([expiresAt])
   @@map("refresh_tokens")
+}
+
+model Project {
+  id          String    @id @default(uuid()) @db.Uuid
+  ownerId     String    @map("owner_id") @db.Uuid
+  name        String    @db.VarChar(120)
+  description String?   @db.VarChar(2000)
+  archivedAt  DateTime? @map("archived_at") @db.Timestamptz(3)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  owner User @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+
+  @@index([ownerId, archivedAt, createdAt])
+  @@map("projects")
 }

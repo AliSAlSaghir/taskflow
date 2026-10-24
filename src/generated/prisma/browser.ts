@@ -37,3 +37,8 @@ export type AuthSession = Prisma.AuthSessionModel
  * 
  */
 export type RefreshToken = Prisma.RefreshTokenModel
+/**
+ * Model Project
+ * 
+ */
+export type Project = Prisma.ProjectModel

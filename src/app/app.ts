@@ -3,6 +3,7 @@ import helmet from "helmet";
 import cookieParser from "cookie-parser";
 import { prisma } from "../infrastructure/database/prisma.js";
 import { authRouter } from "../modules/auth/auth.routes.js";
+import { projectRouter } from "../modules/projects/project.routes.js";
 import { errorHandler } from "./error-handler.js";
 import { notFoundHandler } from "./not-found.js";
 
@@ -35,6 +36,7 @@ app.get("/health/ready", async (_req, res) => {
 });
 
 app.use("/api/v1/auth", authRouter);
+app.use("/api/v1/projects", projectRouter);
 
 app.use(notFoundHandler);
 app.use(errorHandler);
