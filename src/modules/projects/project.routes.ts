@@ -5,6 +5,8 @@ import {
   listProjectsController,
   getProjectController,
   updateProjectController,
+  archiveProjectController,
+  unarchiveProjectController,
 } from "./project.controller.js";
 
 const projectRouter = Router();
@@ -13,5 +15,12 @@ projectRouter.post("/", requireAuth, createProjectController);
 projectRouter.get("/", requireAuth, listProjectsController);
 projectRouter.get("/:projectId", requireAuth, getProjectController);
 projectRouter.patch("/:projectId", requireAuth, updateProjectController);
+projectRouter.delete("/:projectId", requireAuth, archiveProjectController);
+
+projectRouter.post(
+  "/:projectId/unarchive",
+  requireAuth,
+  unarchiveProjectController,
+);
 
 export { projectRouter };

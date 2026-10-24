@@ -608,3 +608,182 @@ describe("PATCH /api/v1/projects/:projectId", () => {
     expect(response.body.error.code).toBe("UNAUTHENTICATED");
   });
 });
+
+describe("DELETE /api/v1/projects/:projectId", () => {
+  it("archives a project without deleting it", async () => {
+    const { accessCookie: cookie, userId } = await createLoggedInUser();
+    const createResponse = await request(app)
+      .post("/api/v1/projects")
+      .set("Cookie", cookie)
+      .send({ name: "Project to archive" });
+
+    const projectId = createResponse.body.data.id as string;
+
+    const response = await request(app)
+      .delete(`/api/v1/projects/${projectId}`)
+      .set("Cookie", cookie);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.id).toBe(projectId);
+    expect(response.body.data.archivedAt).not.toBeNull();
+
+    const storedProject = await prisma.project.findFirst({
+      where: { id: projectId, ownerId: userId },
+    });
+
+    expect(storedProject).not.toBeNull();
+    expect(storedProject?.archivedAt).not.toBeNull();
+  });
+
+  it("returns 200 when archiving an already archived project", async () => {
+    const { accessCookie: cookie } = await createLoggedInUser();
+    const createResponse = await request(app)
+      .post("/api/v1/projects")
+      .set("Cookie", cookie)
+      .send({ name: "Already archived" });
+
+    const projectId = createResponse.body.data.id as string;
+
+    const firstResponse = await request(app)
+      .delete(`/api/v1/projects/${projectId}`)
+      .set("Cookie", cookie);
+
+    const firstArchivedAt = firstResponse.body.data.archivedAt;
+
+    const secondResponse = await request(app)
+      .delete(`/api/v1/projects/${projectId}`)
+      .set("Cookie", cookie);
+
+    expect(secondResponse.status).toBe(200);
+    expect(secondResponse.body.data.archivedAt).toBe(firstArchivedAt);
+  });
+
+  it("does not let another user archive the project", async () => {
+    const owner = await createLoggedInUser();
+    const otherUser = await createLoggedInUser();
+
+    const createResponse = await request(app)
+      .post("/api/v1/projects")
+      .set("Cookie", owner.accessCookie)
+      .send({ name: "Owner's project" });
+
+    const projectId = createResponse.body.data.id as string;
+
+    const response = await request(app)
+      .delete(`/api/v1/projects/${projectId}`)
+      .set("Cookie", otherUser.accessCookie);
+
+    expect(response.status).toBe(404);
+
+    const storedProject = await prisma.project.findUnique({
+      where: { id: projectId },
+    });
+
+    expect(storedProject?.archivedAt).toBeNull();
+  });
+
+  it("returns 400 for an invalid project ID", async () => {
+    const { accessCookie: cookie } = await createLoggedInUser();
+
+    const response = await request(app)
+      .delete("/api/v1/projects/not-a-uuid")
+      .set("Cookie", cookie);
+
+    expect(response.status).toBe(400);
+  });
+
+  it("returns 401 when unauthenticated", async () => {
+    const response = await request(app).delete(
+      "/api/v1/projects/00000000-0000-4000-8000-000000000001",
+    );
+
+    expect(response.status).toBe(401);
+  });
+});
+
+describe("POST /api/v1/projects/:projectId/unarchive", () => {
+  it("restores an archived project", async () => {
+    const { accessCookie: cookie } = await createLoggedInUser();
+    const createResponse = await request(app)
+      .post("/api/v1/projects")
+      .set("Cookie", cookie)
+      .send({ name: "Project to restore" });
+
+    const projectId = createResponse.body.data.id as string;
+
+    await request(app)
+      .delete(`/api/v1/projects/${projectId}`)
+      .set("Cookie", cookie);
+
+    const response = await request(app)
+      .post(`/api/v1/projects/${projectId}/unarchive`)
+      .set("Cookie", cookie);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.id).toBe(projectId);
+    expect(response.body.data.archivedAt).toBeNull();
+  });
+
+  it("returns 200 when restoring a project that is already active", async () => {
+    const { accessCookie: cookie } = await createLoggedInUser();
+    const createResponse = await request(app)
+      .post("/api/v1/projects")
+      .set("Cookie", cookie)
+      .send({ name: "Already active" });
+
+    const projectId = createResponse.body.data.id as string;
+
+    const response = await request(app)
+      .post(`/api/v1/projects/${projectId}/unarchive`)
+      .set("Cookie", cookie);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.archivedAt).toBeNull();
+  });
+
+  it("does not let another user restore the project", async () => {
+    const owner = await createLoggedInUser();
+    const otherUser = await createLoggedInUser();
+
+    const createResponse = await request(app)
+      .post("/api/v1/projects")
+      .set("Cookie", owner.accessCookie)
+      .send({ name: "Private archived project" });
+
+    const projectId = createResponse.body.data.id as string;
+
+    await request(app)
+      .delete(`/api/v1/projects/${projectId}`)
+      .set("Cookie", owner.accessCookie);
+
+    const response = await request(app)
+      .post(`/api/v1/projects/${projectId}/unarchive`)
+      .set("Cookie", otherUser.accessCookie);
+
+    expect(response.status).toBe(404);
+
+    const storedProject = await prisma.project.findUnique({
+      where: { id: projectId },
+    });
+
+    expect(storedProject?.archivedAt).not.toBeNull();
+  });
+
+  it("returns 400 for an invalid project ID", async () => {
+    const { accessCookie: cookie } = await createLoggedInUser();
+
+    const response = await request(app)
+      .post("/api/v1/projects/not-a-uuid/unarchive")
+      .set("Cookie", cookie);
+
+    expect(response.status).toBe(400);
+  });
+
+  it("returns 401 when unauthenticated", async () => {
+    const response = await request(app).post(
+      "/api/v1/projects/00000000-0000-4000-8000-000000000001/unarchive",
+    );
+
+    expect(response.status).toBe(401);
+  });
+});

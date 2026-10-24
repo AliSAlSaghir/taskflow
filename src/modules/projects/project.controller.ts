@@ -10,6 +10,8 @@ import {
   listProjects,
   getProject,
   updateProject,
+  archiveProject,
+  unarchiveProject,
 } from "./project.service.js";
 
 export const createProjectController: RequestHandler = async (
@@ -153,6 +155,86 @@ export const updateProjectController: RequestHandler = async (
       idResult.data,
       bodyResult.data,
     );
+
+    if (!project) {
+      res.status(404).json({
+        error: {
+          code: "NOT_FOUND",
+          message: "The requested resource was not found.",
+        },
+      });
+      return;
+    }
+
+    res.status(200).json({ data: project });
+  } catch (error: unknown) {
+    next(error);
+  }
+};
+
+export const archiveProjectController: RequestHandler = async (
+  req,
+  res,
+  next,
+) => {
+  const result = projectIdSchema.safeParse(req.params.projectId);
+
+  if (!result.success) {
+    res.status(400).json({
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "Request validation failed.",
+        details: result.error.issues.map((issue) => ({
+          field: "projectId",
+          message: issue.message,
+        })),
+      },
+    });
+    return;
+  }
+
+  try {
+    const project = await archiveProject(res.locals.user.id, result.data);
+
+    if (!project) {
+      res.status(404).json({
+        error: {
+          code: "NOT_FOUND",
+          message: "The requested resource was not found.",
+        },
+      });
+      return;
+    }
+
+    res.status(200).json({ data: project });
+  } catch (error: unknown) {
+    next(error);
+  }
+};
+
+export const unarchiveProjectController: RequestHandler = async (
+  req,
+  res,
+  next,
+) => {
+  const result = projectIdSchema.safeParse(req.params.projectId);
+
+  if (!result.success) {
+    res.status(400).json({
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "Request validation failed.",
+        details: result.error.issues.map((issue) => ({
+          field: "projectId",
+          message: issue.message,
+        })),
+      },
+    });
+    return;
+  }
+
+  try {
+    const project = await unarchiveProject(res.locals.user.id, result.data);
 
     if (!project) {
       res.status(404).json({

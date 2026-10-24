@@ -120,3 +120,87 @@ export async function updateProject(
     },
   });
 }
+
+export async function archiveProject(ownerId: string, projectId: string) {
+  const project = await prisma.project.findFirst({
+    where: {
+      id: projectId,
+      ownerId,
+    },
+    select: {
+      id: true,
+      name: true,
+      description: true,
+      archivedAt: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  });
+
+  if (!project) {
+    return null;
+  }
+
+  if (project.archivedAt !== null) {
+    return project;
+  }
+
+  return prisma.project.update({
+    where: {
+      id: projectId,
+    },
+    data: {
+      archivedAt: new Date(),
+    },
+    select: {
+      id: true,
+      name: true,
+      description: true,
+      archivedAt: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  });
+}
+
+export async function unarchiveProject(ownerId: string, projectId: string) {
+  const project = await prisma.project.findFirst({
+    where: {
+      id: projectId,
+      ownerId,
+    },
+    select: {
+      id: true,
+      name: true,
+      description: true,
+      archivedAt: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  });
+
+  if (!project) {
+    return null;
+  }
+
+  if (project.archivedAt === null) {
+    return project;
+  }
+
+  return prisma.project.update({
+    where: {
+      id: projectId,
+    },
+    data: {
+      archivedAt: null,
+    },
+    select: {
+      id: true,
+      name: true,
+      description: true,
+      archivedAt: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  });
+}
