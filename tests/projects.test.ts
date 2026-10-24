@@ -173,3 +173,168 @@ describe("POST /api/v1/projects", () => {
     expect(project).toBeNull();
   });
 });
+
+describe("GET /api/v1/projects", () => {
+  it("rejects unauthenticated requests", async () => {
+    const response = await request(app).get("/api/v1/projects");
+
+    expect(response.status).toBe(401);
+    expect(response.body.error.code).toBe("UNAUTHENTICATED");
+  });
+
+  it("returns only projects owned by the authenticated user", async () => {
+    const owner = await createLoggedInUser();
+    const anotherUser = await createLoggedInUser();
+
+    await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "Owner Project",
+      },
+    });
+
+    await prisma.project.create({
+      data: {
+        ownerId: anotherUser.userId,
+        name: "Another User Project",
+      },
+    });
+
+    const response = await request(app)
+      .get("/api/v1/projects")
+      .set("Cookie", owner.accessCookie);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toHaveLength(1);
+    expect(response.body.data[0].name).toBe("Owner Project");
+    expect(response.body.data[0]).not.toHaveProperty("ownerId");
+    expect(response.body.pagination).toMatchObject({
+      page: 1,
+      limit: 10,
+      totalItems: 1,
+      totalPages: 1,
+    });
+  });
+
+  it("paginates results without duplicating projects across pages", async () => {
+    const user = await createLoggedInUser();
+
+    for (const name of ["Project A", "Project B", "Project C"]) {
+      await prisma.project.create({
+        data: {
+          ownerId: user.userId,
+          name,
+        },
+      });
+    }
+
+    const firstPage = await request(app)
+      .get("/api/v1/projects")
+      .query({ page: 1, limit: 2 })
+      .set("Cookie", user.accessCookie);
+
+    const secondPage = await request(app)
+      .get("/api/v1/projects")
+      .query({ page: 2, limit: 2 })
+      .set("Cookie", user.accessCookie);
+
+    expect(firstPage.status).toBe(200);
+    expect(firstPage.body.data).toHaveLength(2);
+    expect(firstPage.body.pagination).toMatchObject({
+      page: 1,
+      limit: 2,
+      totalItems: 3,
+      totalPages: 2,
+    });
+
+    expect(secondPage.status).toBe(200);
+    expect(secondPage.body.data).toHaveLength(1);
+    expect(secondPage.body.pagination.totalPages).toBe(2);
+
+    const firstIds = firstPage.body.data.map(
+      (project: { id: string }) => project.id,
+    );
+    const secondIds = secondPage.body.data.map(
+      (project: { id: string }) => project.id,
+    );
+
+    expect(firstIds).not.toContain(secondIds[0]);
+    expect([...firstIds, ...secondIds]).toHaveLength(3);
+  });
+
+  it("returns active projects by default and archived projects when requested", async () => {
+    const user = await createLoggedInUser();
+
+    await prisma.project.create({
+      data: {
+        ownerId: user.userId,
+        name: "Active Project",
+      },
+    });
+
+    await prisma.project.create({
+      data: {
+        ownerId: user.userId,
+        name: "Archived Project",
+        archivedAt: new Date(),
+      },
+    });
+
+    const activeResponse = await request(app)
+      .get("/api/v1/projects")
+      .set("Cookie", user.accessCookie);
+
+    expect(activeResponse.status).toBe(200);
+    expect(
+      activeResponse.body.data.map((project: { name: string }) => project.name),
+    ).toEqual(["Active Project"]);
+
+    const archivedResponse = await request(app)
+      .get("/api/v1/projects")
+      .query({ archived: true })
+      .set("Cookie", user.accessCookie);
+
+    expect(archivedResponse.status).toBe(200);
+    expect(
+      archivedResponse.body.data.map(
+        (project: { name: string }) => project.name,
+      ),
+    ).toEqual(["Archived Project"]);
+  });
+
+  it("rejects invalid pagination and archive query parameters", async () => {
+    const user = await createLoggedInUser();
+
+    for (const query of [
+      { page: "0" },
+      { page: "abc" },
+      { limit: "101" },
+      { archived: "yes" },
+    ]) {
+      const response = await request(app)
+        .get("/api/v1/projects")
+        .query(query)
+        .set("Cookie", user.accessCookie);
+
+      expect(response.status).toBe(400);
+      expect(response.body.error.code).toBe("VALIDATION_ERROR");
+    }
+  });
+
+  it("returns an empty list when the user has no projects", async () => {
+    const user = await createLoggedInUser();
+
+    const response = await request(app)
+      .get("/api/v1/projects")
+      .set("Cookie", user.accessCookie);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toEqual([]);
+    expect(response.body.pagination).toMatchObject({
+      page: 1,
+      limit: 10,
+      totalItems: 0,
+      totalPages: 0,
+    });
+  });
+});

@@ -17,4 +17,14 @@ export const createProjectSchema = z
   })
   .strict();
 
+export const listProjectsQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(10),
+  archived: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((value) => value === "true"),
+});
+
 export type CreateProjectInput = z.infer<typeof createProjectSchema>;
+export type ListProjectsQuery = z.infer<typeof listProjectsQuerySchema>;
