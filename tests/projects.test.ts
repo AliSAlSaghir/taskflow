@@ -409,3 +409,202 @@ describe("GET /api/v1/projects/:projectId", () => {
     expect(response.body.error.code).toBe("VALIDATION_ERROR");
   });
 });
+
+describe("PATCH /api/v1/projects/:projectId", () => {
+  it("updates a project's name without changing its description", async () => {
+    const user = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: user.userId,
+        name: "Original Name",
+        description: "Keep this description.",
+      },
+    });
+
+    const response = await request(app)
+      .patch(`/api/v1/projects/${project.id}`)
+      .set("Cookie", user.accessCookie)
+      .send({ name: "Updated Name" });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toMatchObject({
+      id: project.id,
+      name: "Updated Name",
+      description: "Keep this description.",
+    });
+    expect(response.body.data).not.toHaveProperty("ownerId");
+  });
+
+  it("updates or clears a project's description", async () => {
+    const user = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: user.userId,
+        name: "Description Test",
+        description: "Original description.",
+      },
+    });
+
+    const updateResponse = await request(app)
+      .patch(`/api/v1/projects/${project.id}`)
+      .set("Cookie", user.accessCookie)
+      .send({ description: "Updated description." });
+
+    expect(updateResponse.status).toBe(200);
+    expect(updateResponse.body.data.description).toBe("Updated description.");
+
+    const clearResponse = await request(app)
+      .patch(`/api/v1/projects/${project.id}`)
+      .set("Cookie", user.accessCookie)
+      .send({ description: null });
+
+    expect(clearResponse.status).toBe(200);
+    expect(clearResponse.body.data.description).toBeNull();
+  });
+
+  it("rejects an empty body and unsupported fields", async () => {
+    const user = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: user.userId,
+        name: "Validation Test",
+      },
+    });
+
+    const emptyResponse = await request(app)
+      .patch(`/api/v1/projects/${project.id}`)
+      .set("Cookie", user.accessCookie)
+      .send({});
+
+    expect(emptyResponse.status).toBe(400);
+    expect(emptyResponse.body.error.code).toBe("VALIDATION_ERROR");
+
+    const unsupportedResponse = await request(app)
+      .patch(`/api/v1/projects/${project.id}`)
+      .set("Cookie", user.accessCookie)
+      .send({ ownerId: randomUUID() });
+
+    expect(unsupportedResponse.status).toBe(400);
+    expect(unsupportedResponse.body.error.code).toBe("VALIDATION_ERROR");
+
+    const unchangedProject = await prisma.project.findUniqueOrThrow({
+      where: { id: project.id },
+    });
+
+    expect(unchangedProject.ownerId).toBe(user.userId);
+    expect(unchangedProject.name).toBe("Validation Test");
+  });
+
+  it("rejects invalid field values", async () => {
+    const user = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: user.userId,
+        name: "Invalid Input Test",
+      },
+    });
+
+    for (const body of [
+      { name: "   " },
+      { name: "x".repeat(121) },
+      { description: "x".repeat(2001) },
+    ]) {
+      const response = await request(app)
+        .patch(`/api/v1/projects/${project.id}`)
+        .set("Cookie", user.accessCookie)
+        .send(body);
+
+      expect(response.status).toBe(400);
+      expect(response.body.error.code).toBe("VALIDATION_ERROR");
+    }
+  });
+
+  it("returns 404 when the project belongs to another user", async () => {
+    const owner = await createLoggedInUser();
+    const anotherUser = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "Private Project",
+      },
+    });
+
+    const response = await request(app)
+      .patch(`/api/v1/projects/${project.id}`)
+      .set("Cookie", anotherUser.accessCookie)
+      .send({ name: "Unauthorized Change" });
+
+    expect(response.status).toBe(404);
+    expect(response.body.error.code).toBe("NOT_FOUND");
+
+    const unchangedProject = await prisma.project.findUniqueOrThrow({
+      where: { id: project.id },
+    });
+
+    expect(unchangedProject.name).toBe("Private Project");
+  });
+
+  it("returns 404 when the project does not exist", async () => {
+    const user = await createLoggedInUser();
+
+    const response = await request(app)
+      .patch(`/api/v1/projects/${randomUUID()}`)
+      .set("Cookie", user.accessCookie)
+      .send({ name: "Missing Project" });
+
+    expect(response.status).toBe(404);
+    expect(response.body.error.code).toBe("NOT_FOUND");
+  });
+
+  it("rejects a malformed project UUID", async () => {
+    const user = await createLoggedInUser();
+
+    const response = await request(app)
+      .patch("/api/v1/projects/not-a-uuid")
+      .set("Cookie", user.accessCookie)
+      .send({ name: "Updated Name" });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("does not allow archived projects to be updated", async () => {
+    const user = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: user.userId,
+        name: "Archived Project",
+        archivedAt: new Date(),
+      },
+    });
+
+    const response = await request(app)
+      .patch(`/api/v1/projects/${project.id}`)
+      .set("Cookie", user.accessCookie)
+      .send({ name: "Should Not Change" });
+
+    expect(response.status).toBe(404);
+    expect(response.body.error.code).toBe("NOT_FOUND");
+
+    const unchangedProject = await prisma.project.findUniqueOrThrow({
+      where: { id: project.id },
+    });
+
+    expect(unchangedProject.name).toBe("Archived Project");
+  });
+
+  it("rejects unauthenticated requests", async () => {
+    const response = await request(app)
+      .patch(`/api/v1/projects/${randomUUID()}`)
+      .send({ name: "Unauthorized Project" });
+
+    expect(response.status).toBe(401);
+    expect(response.body.error.code).toBe("UNAUTHENTICATED");
+  });
+});

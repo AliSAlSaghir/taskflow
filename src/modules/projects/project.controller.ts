@@ -3,8 +3,14 @@ import {
   createProjectSchema,
   listProjectsQuerySchema,
   projectIdSchema,
+  updateProjectSchema,
 } from "./project.schema.js";
-import { createProject, listProjects, getProject } from "./project.service.js";
+import {
+  createProject,
+  listProjects,
+  getProject,
+  updateProject,
+} from "./project.service.js";
 
 export const createProjectController: RequestHandler = async (
   req,
@@ -87,6 +93,66 @@ export const getProjectController: RequestHandler = async (req, res, next) => {
 
   try {
     const project = await getProject(res.locals.user.id, result.data);
+
+    if (!project) {
+      res.status(404).json({
+        error: {
+          code: "NOT_FOUND",
+          message: "The requested resource was not found.",
+        },
+      });
+      return;
+    }
+
+    res.status(200).json({ data: project });
+  } catch (error: unknown) {
+    next(error);
+  }
+};
+
+export const updateProjectController: RequestHandler = async (
+  req,
+  res,
+  next,
+) => {
+  const idResult = projectIdSchema.safeParse(req.params.projectId);
+
+  if (!idResult.success) {
+    res.status(400).json({
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "Request validation failed.",
+        details: idResult.error.issues.map((issue) => ({
+          field: "projectId",
+          message: issue.message,
+        })),
+      },
+    });
+    return;
+  }
+
+  const bodyResult = updateProjectSchema.safeParse(req.body);
+
+  if (!bodyResult.success) {
+    res.status(400).json({
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "Request validation failed.",
+        details: bodyResult.error.issues.map((issue) => ({
+          field: issue.path.join("."),
+          message: issue.message,
+        })),
+      },
+    });
+    return;
+  }
+
+  try {
+    const project = await updateProject(
+      res.locals.user.id,
+      idResult.data,
+      bodyResult.data,
+    );
 
     if (!project) {
       res.status(404).json({

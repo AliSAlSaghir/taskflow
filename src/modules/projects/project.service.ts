@@ -2,6 +2,7 @@ import { prisma } from "../../infrastructure/database/prisma.js";
 import type {
   CreateProjectInput,
   ListProjectsQuery,
+  UpdateProjectInput,
 } from "./project.schema.js";
 
 export async function createProject(
@@ -61,6 +62,49 @@ export async function listProjects(ownerId: string, query: ListProjectsQuery) {
 }
 
 export async function getProject(ownerId: string, projectId: string) {
+  return prisma.project.findFirst({
+    where: {
+      id: projectId,
+      ownerId,
+    },
+    select: {
+      id: true,
+      name: true,
+      description: true,
+      archivedAt: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  });
+}
+
+export async function updateProject(
+  ownerId: string,
+  projectId: string,
+  input: UpdateProjectInput,
+) {
+  const data = {
+    ...(input.name !== undefined && {
+      name: input.name,
+    }),
+    ...(input.description !== undefined && {
+      description: input.description,
+    }),
+  };
+
+  const result = await prisma.project.updateMany({
+    where: {
+      id: projectId,
+      ownerId,
+      archivedAt: null,
+    },
+    data,
+  });
+
+  if (result.count === 0) {
+    return null;
+  }
+
   return prisma.project.findFirst({
     where: {
       id: projectId,

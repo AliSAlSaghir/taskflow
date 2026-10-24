@@ -28,5 +28,27 @@ export const listProjectsQuerySchema = z.object({
 
 export const projectIdSchema = z.string().uuid();
 
+export const updateProjectSchema = z
+  .object({
+    name: z
+      .string()
+      .trim()
+      .min(1, "Project name is required.")
+      .max(120, "Project name must be at most 120 characters.")
+      .optional(),
+
+    description: z
+      .string()
+      .trim()
+      .max(2000, "Description must be at most 2000 characters.")
+      .nullable()
+      .optional(),
+  })
+  .strict()
+  .refine((data) => data.name !== undefined || data.description !== undefined, {
+    message: "At least one field must be provided.",
+  });
+
 export type CreateProjectInput = z.infer<typeof createProjectSchema>;
 export type ListProjectsQuery = z.infer<typeof listProjectsQuerySchema>;
+export type UpdateProjectInput = z.infer<typeof updateProjectSchema>;
