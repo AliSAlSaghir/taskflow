@@ -59,3 +59,20 @@ export async function listProjects(ownerId: string, query: ListProjectsQuery) {
     },
   };
 }
+
+export async function getProject(ownerId: string, projectId: string) {
+  return prisma.project.findFirst({
+    where: {
+      id: projectId,
+      ownerId,
+    },
+    select: {
+      id: true,
+      name: true,
+      description: true,
+      archivedAt: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  });
+}

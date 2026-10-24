@@ -338,3 +338,74 @@ describe("GET /api/v1/projects", () => {
     });
   });
 });
+
+describe("GET /api/v1/projects/:projectId", () => {
+  it("returns a project owned by the authenticated user", async () => {
+    const user = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: user.userId,
+        name: "Project Details Test",
+        description: "Testing single-project retrieval.",
+      },
+    });
+
+    const response = await request(app)
+      .get(`/api/v1/projects/${project.id}`)
+      .set("Cookie", user.accessCookie);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toMatchObject({
+      id: project.id,
+      name: "Project Details Test",
+      description: "Testing single-project retrieval.",
+      archivedAt: null,
+    });
+    expect(response.body.data).not.toHaveProperty("ownerId");
+  });
+
+  it("returns 404 when the project belongs to another user", async () => {
+    const owner = await createLoggedInUser();
+    const anotherUser = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "Private Project",
+      },
+    });
+
+    const response = await request(app)
+      .get(`/api/v1/projects/${project.id}`)
+      .set("Cookie", anotherUser.accessCookie);
+
+    expect(response.status).toBe(404);
+    expect(response.body.error.code).toBe("NOT_FOUND");
+    expect(response.body.error.message).toBe(
+      "The requested resource was not found.",
+    );
+  });
+
+  it("returns 404 when the project does not exist", async () => {
+    const user = await createLoggedInUser();
+
+    const response = await request(app)
+      .get(`/api/v1/projects/${randomUUID()}`)
+      .set("Cookie", user.accessCookie);
+
+    expect(response.status).toBe(404);
+    expect(response.body.error.code).toBe("NOT_FOUND");
+  });
+
+  it("rejects a malformed project UUID", async () => {
+    const user = await createLoggedInUser();
+
+    const response = await request(app)
+      .get("/api/v1/projects/not-a-uuid")
+      .set("Cookie", user.accessCookie);
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe("VALIDATION_ERROR");
+  });
+});

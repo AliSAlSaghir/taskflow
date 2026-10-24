@@ -26,5 +26,7 @@ export const listProjectsQuerySchema = z.object({
     .transform((value) => value === "true"),
 });
 
+export const projectIdSchema = z.string().uuid();
+
 export type CreateProjectInput = z.infer<typeof createProjectSchema>;
 export type ListProjectsQuery = z.infer<typeof listProjectsQuerySchema>;
