@@ -18,9 +18,10 @@ model User {
   createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt    DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  profile       Profile?
-  authSessions  AuthSession[]
-  ownedProjects Project[]
+  profile            Profile?
+  authSessions       AuthSession[]
+  ownedProjects      Project[]
+  projectMemberships ProjectMembership[]
 
   @@map("users")
 }
@@ -90,8 +91,23 @@ model Project {
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  owner User @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  owner       User                @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  memberships ProjectMembership[]
 
   @@index([ownerId, archivedAt, createdAt])
   @@map("projects")
+}
+
+model ProjectMembership {
+  id        String   @id @default(uuid()) @db.Uuid
+  projectId String   @map("project_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  joinedAt  DateTime @default(now()) @map("joined_at") @db.Timestamptz(3)
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([projectId, userId])
+  @@index([userId, joinedAt])
+  @@map("project_memberships")
 }

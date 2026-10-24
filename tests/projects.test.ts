@@ -15,6 +15,12 @@ afterEach(async () => {
 
     if (!user) continue;
 
+    await prisma.projectMembership.deleteMany({
+      where: {
+        OR: [{ project: { ownerId: user.id } }, { userId: user.id }],
+      },
+    });
+
     // Projects must be removed before their owners because the
     // foreign key deliberately prevents deleting an owner first.
     await prisma.project.deleteMany({

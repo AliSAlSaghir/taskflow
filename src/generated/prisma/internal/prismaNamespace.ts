@@ -401,7 +401,8 @@ export const ModelName = {
   Profile: 'Profile',
   AuthSession: 'AuthSession',
   RefreshToken: 'RefreshToken',
-  Project: 'Project'
+  Project: 'Project',
+  ProjectMembership: 'ProjectMembership'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -417,7 +418,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "user" | "profile" | "authSession" | "refreshToken" | "project"
+    modelProps: "user" | "profile" | "authSession" | "refreshToken" | "project" | "projectMembership"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -791,6 +792,80 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         }
       }
     }
+    ProjectMembership: {
+      payload: Prisma.$ProjectMembershipPayload<ExtArgs>
+      fields: Prisma.ProjectMembershipFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.ProjectMembershipFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ProjectMembershipPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.ProjectMembershipFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ProjectMembershipPayload>
+        }
+        findFirst: {
+          args: Prisma.ProjectMembershipFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ProjectMembershipPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.ProjectMembershipFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ProjectMembershipPayload>
+        }
+        findMany: {
+          args: Prisma.ProjectMembershipFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ProjectMembershipPayload>[]
+        }
+        create: {
+          args: Prisma.ProjectMembershipCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ProjectMembershipPayload>
+        }
+        createMany: {
+          args: Prisma.ProjectMembershipCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.ProjectMembershipCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ProjectMembershipPayload>[]
+        }
+        delete: {
+          args: Prisma.ProjectMembershipDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ProjectMembershipPayload>
+        }
+        update: {
+          args: Prisma.ProjectMembershipUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ProjectMembershipPayload>
+        }
+        deleteMany: {
+          args: Prisma.ProjectMembershipDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.ProjectMembershipUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.ProjectMembershipUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ProjectMembershipPayload>[]
+        }
+        upsert: {
+          args: Prisma.ProjectMembershipUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ProjectMembershipPayload>
+        }
+        aggregate: {
+          args: Prisma.ProjectMembershipAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateProjectMembership>
+        }
+        groupBy: {
+          args: Prisma.ProjectMembershipGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.ProjectMembershipGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.ProjectMembershipCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.ProjectMembershipCountAggregateOutputType> | number
+        }
+      }
+    }
   }
 } & {
   other: {
@@ -892,6 +967,16 @@ export const ProjectScalarFieldEnum = {
 } as const
 
 export type ProjectScalarFieldEnum = (typeof ProjectScalarFieldEnum)[keyof typeof ProjectScalarFieldEnum]
+
+
+export const ProjectMembershipScalarFieldEnum = {
+  id: 'id',
+  projectId: 'projectId',
+  userId: 'userId',
+  joinedAt: 'joinedAt'
+} as const
+
+export type ProjectMembershipScalarFieldEnum = (typeof ProjectMembershipScalarFieldEnum)[keyof typeof ProjectMembershipScalarFieldEnum]
 
 
 export const SortOrder = {
@@ -1149,6 +1234,7 @@ export type GlobalOmitConfig = {
   authSession?: Prisma.AuthSessionOmit
   refreshToken?: Prisma.RefreshTokenOmit
   project?: Prisma.ProjectOmit
+  projectMembership?: Prisma.ProjectMembershipOmit
 }
 
 /* Types for Logging */

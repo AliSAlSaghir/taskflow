@@ -49,6 +49,19 @@ export const updateProjectSchema = z
     message: "At least one field must be provided.",
   });
 
+export const addProjectMemberSchema = z
+  .object({
+    email: z
+      .string()
+      .trim()
+      .email("A valid email address is required.")
+      .max(254, "Email must be at most 254 characters.")
+      .transform((email) => email.toLowerCase()),
+  })
+  .strict();
+
 export type CreateProjectInput = z.infer<typeof createProjectSchema>;
 export type ListProjectsQuery = z.infer<typeof listProjectsQuerySchema>;
 export type UpdateProjectInput = z.infer<typeof updateProjectSchema>;
+
+export type AddProjectMemberInput = z.infer<typeof addProjectMemberSchema>;
