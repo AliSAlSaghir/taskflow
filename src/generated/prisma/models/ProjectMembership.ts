@@ -176,6 +176,7 @@ export type ProjectMembershipWhereInput = {
   joinedAt?: Prisma.DateTimeFilter<"ProjectMembership"> | Date | string
   project?: Prisma.XOR<Prisma.ProjectScalarRelationFilter, Prisma.ProjectWhereInput>
   user?: Prisma.XOR<Prisma.UserScalarRelationFilter, Prisma.UserWhereInput>
+  assignedTasks?: Prisma.TaskListRelationFilter
 }
 
 export type ProjectMembershipOrderByWithRelationInput = {
@@ -185,6 +186,7 @@ export type ProjectMembershipOrderByWithRelationInput = {
   joinedAt?: Prisma.SortOrder
   project?: Prisma.ProjectOrderByWithRelationInput
   user?: Prisma.UserOrderByWithRelationInput
+  assignedTasks?: Prisma.TaskOrderByRelationAggregateInput
 }
 
 export type ProjectMembershipWhereUniqueInput = Prisma.AtLeast<{
@@ -198,6 +200,7 @@ export type ProjectMembershipWhereUniqueInput = Prisma.AtLeast<{
   joinedAt?: Prisma.DateTimeFilter<"ProjectMembership"> | Date | string
   project?: Prisma.XOR<Prisma.ProjectScalarRelationFilter, Prisma.ProjectWhereInput>
   user?: Prisma.XOR<Prisma.UserScalarRelationFilter, Prisma.UserWhereInput>
+  assignedTasks?: Prisma.TaskListRelationFilter
 }, "id" | "projectId_userId">
 
 export type ProjectMembershipOrderByWithAggregationInput = {
@@ -225,6 +228,7 @@ export type ProjectMembershipCreateInput = {
   joinedAt?: Date | string
   project: Prisma.ProjectCreateNestedOneWithoutMembershipsInput
   user: Prisma.UserCreateNestedOneWithoutProjectMembershipsInput
+  assignedTasks?: Prisma.TaskCreateNestedManyWithoutAssigneeInput
 }
 
 export type ProjectMembershipUncheckedCreateInput = {
@@ -232,6 +236,7 @@ export type ProjectMembershipUncheckedCreateInput = {
   projectId: string
   userId: string
   joinedAt?: Date | string
+  assignedTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutAssigneeInput
 }
 
 export type ProjectMembershipUpdateInput = {
@@ -239,6 +244,7 @@ export type ProjectMembershipUpdateInput = {
   joinedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   project?: Prisma.ProjectUpdateOneRequiredWithoutMembershipsNestedInput
   user?: Prisma.UserUpdateOneRequiredWithoutProjectMembershipsNestedInput
+  assignedTasks?: Prisma.TaskUpdateManyWithoutAssigneeNestedInput
 }
 
 export type ProjectMembershipUncheckedUpdateInput = {
@@ -246,6 +252,7 @@ export type ProjectMembershipUncheckedUpdateInput = {
   projectId?: Prisma.StringFieldUpdateOperationsInput | string
   userId?: Prisma.StringFieldUpdateOperationsInput | string
   joinedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  assignedTasks?: Prisma.TaskUncheckedUpdateManyWithoutAssigneeNestedInput
 }
 
 export type ProjectMembershipCreateManyInput = {
@@ -301,6 +308,11 @@ export type ProjectMembershipMinOrderByAggregateInput = {
   projectId?: Prisma.SortOrder
   userId?: Prisma.SortOrder
   joinedAt?: Prisma.SortOrder
+}
+
+export type ProjectMembershipNullableScalarRelationFilter = {
+  is?: Prisma.ProjectMembershipWhereInput | null
+  isNot?: Prisma.ProjectMembershipWhereInput | null
 }
 
 export type ProjectMembershipCreateNestedManyWithoutUserInput = {
@@ -387,16 +399,34 @@ export type ProjectMembershipUncheckedUpdateManyWithoutProjectNestedInput = {
   deleteMany?: Prisma.ProjectMembershipScalarWhereInput | Prisma.ProjectMembershipScalarWhereInput[]
 }
 
+export type ProjectMembershipCreateNestedOneWithoutAssignedTasksInput = {
+  create?: Prisma.XOR<Prisma.ProjectMembershipCreateWithoutAssignedTasksInput, Prisma.ProjectMembershipUncheckedCreateWithoutAssignedTasksInput>
+  connectOrCreate?: Prisma.ProjectMembershipCreateOrConnectWithoutAssignedTasksInput
+  connect?: Prisma.ProjectMembershipWhereUniqueInput
+}
+
+export type ProjectMembershipUpdateOneWithoutAssignedTasksNestedInput = {
+  create?: Prisma.XOR<Prisma.ProjectMembershipCreateWithoutAssignedTasksInput, Prisma.ProjectMembershipUncheckedCreateWithoutAssignedTasksInput>
+  connectOrCreate?: Prisma.ProjectMembershipCreateOrConnectWithoutAssignedTasksInput
+  upsert?: Prisma.ProjectMembershipUpsertWithoutAssignedTasksInput
+  disconnect?: Prisma.ProjectMembershipWhereInput | boolean
+  delete?: Prisma.ProjectMembershipWhereInput | boolean
+  connect?: Prisma.ProjectMembershipWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.ProjectMembershipUpdateToOneWithWhereWithoutAssignedTasksInput, Prisma.ProjectMembershipUpdateWithoutAssignedTasksInput>, Prisma.ProjectMembershipUncheckedUpdateWithoutAssignedTasksInput>
+}
+
 export type ProjectMembershipCreateWithoutUserInput = {
   id?: string
   joinedAt?: Date | string
   project: Prisma.ProjectCreateNestedOneWithoutMembershipsInput
+  assignedTasks?: Prisma.TaskCreateNestedManyWithoutAssigneeInput
 }
 
 export type ProjectMembershipUncheckedCreateWithoutUserInput = {
   id?: string
   projectId: string
   joinedAt?: Date | string
+  assignedTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutAssigneeInput
 }
 
 export type ProjectMembershipCreateOrConnectWithoutUserInput = {
@@ -439,12 +469,14 @@ export type ProjectMembershipCreateWithoutProjectInput = {
   id?: string
   joinedAt?: Date | string
   user: Prisma.UserCreateNestedOneWithoutProjectMembershipsInput
+  assignedTasks?: Prisma.TaskCreateNestedManyWithoutAssigneeInput
 }
 
 export type ProjectMembershipUncheckedCreateWithoutProjectInput = {
   id?: string
   userId: string
   joinedAt?: Date | string
+  assignedTasks?: Prisma.TaskUncheckedCreateNestedManyWithoutAssigneeInput
 }
 
 export type ProjectMembershipCreateOrConnectWithoutProjectInput = {
@@ -473,6 +505,50 @@ export type ProjectMembershipUpdateManyWithWhereWithoutProjectInput = {
   data: Prisma.XOR<Prisma.ProjectMembershipUpdateManyMutationInput, Prisma.ProjectMembershipUncheckedUpdateManyWithoutProjectInput>
 }
 
+export type ProjectMembershipCreateWithoutAssignedTasksInput = {
+  id?: string
+  joinedAt?: Date | string
+  project: Prisma.ProjectCreateNestedOneWithoutMembershipsInput
+  user: Prisma.UserCreateNestedOneWithoutProjectMembershipsInput
+}
+
+export type ProjectMembershipUncheckedCreateWithoutAssignedTasksInput = {
+  id?: string
+  projectId: string
+  userId: string
+  joinedAt?: Date | string
+}
+
+export type ProjectMembershipCreateOrConnectWithoutAssignedTasksInput = {
+  where: Prisma.ProjectMembershipWhereUniqueInput
+  create: Prisma.XOR<Prisma.ProjectMembershipCreateWithoutAssignedTasksInput, Prisma.ProjectMembershipUncheckedCreateWithoutAssignedTasksInput>
+}
+
+export type ProjectMembershipUpsertWithoutAssignedTasksInput = {
+  update: Prisma.XOR<Prisma.ProjectMembershipUpdateWithoutAssignedTasksInput, Prisma.ProjectMembershipUncheckedUpdateWithoutAssignedTasksInput>
+  create: Prisma.XOR<Prisma.ProjectMembershipCreateWithoutAssignedTasksInput, Prisma.ProjectMembershipUncheckedCreateWithoutAssignedTasksInput>
+  where?: Prisma.ProjectMembershipWhereInput
+}
+
+export type ProjectMembershipUpdateToOneWithWhereWithoutAssignedTasksInput = {
+  where?: Prisma.ProjectMembershipWhereInput
+  data: Prisma.XOR<Prisma.ProjectMembershipUpdateWithoutAssignedTasksInput, Prisma.ProjectMembershipUncheckedUpdateWithoutAssignedTasksInput>
+}
+
+export type ProjectMembershipUpdateWithoutAssignedTasksInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  joinedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  project?: Prisma.ProjectUpdateOneRequiredWithoutMembershipsNestedInput
+  user?: Prisma.UserUpdateOneRequiredWithoutProjectMembershipsNestedInput
+}
+
+export type ProjectMembershipUncheckedUpdateWithoutAssignedTasksInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  projectId?: Prisma.StringFieldUpdateOperationsInput | string
+  userId?: Prisma.StringFieldUpdateOperationsInput | string
+  joinedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+}
+
 export type ProjectMembershipCreateManyUserInput = {
   id?: string
   projectId: string
@@ -483,12 +559,14 @@ export type ProjectMembershipUpdateWithoutUserInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   joinedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   project?: Prisma.ProjectUpdateOneRequiredWithoutMembershipsNestedInput
+  assignedTasks?: Prisma.TaskUpdateManyWithoutAssigneeNestedInput
 }
 
 export type ProjectMembershipUncheckedUpdateWithoutUserInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   projectId?: Prisma.StringFieldUpdateOperationsInput | string
   joinedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  assignedTasks?: Prisma.TaskUncheckedUpdateManyWithoutAssigneeNestedInput
 }
 
 export type ProjectMembershipUncheckedUpdateManyWithoutUserInput = {
@@ -507,12 +585,14 @@ export type ProjectMembershipUpdateWithoutProjectInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   joinedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   user?: Prisma.UserUpdateOneRequiredWithoutProjectMembershipsNestedInput
+  assignedTasks?: Prisma.TaskUpdateManyWithoutAssigneeNestedInput
 }
 
 export type ProjectMembershipUncheckedUpdateWithoutProjectInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   userId?: Prisma.StringFieldUpdateOperationsInput | string
   joinedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  assignedTasks?: Prisma.TaskUncheckedUpdateManyWithoutAssigneeNestedInput
 }
 
 export type ProjectMembershipUncheckedUpdateManyWithoutProjectInput = {
@@ -522,6 +602,35 @@ export type ProjectMembershipUncheckedUpdateManyWithoutProjectInput = {
 }
 
 
+/**
+ * Count Type ProjectMembershipCountOutputType
+ */
+
+export type ProjectMembershipCountOutputType = {
+  assignedTasks: number
+}
+
+export type ProjectMembershipCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  assignedTasks?: boolean | ProjectMembershipCountOutputTypeCountAssignedTasksArgs
+}
+
+/**
+ * ProjectMembershipCountOutputType without action
+ */
+export type ProjectMembershipCountOutputTypeDefaultArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the ProjectMembershipCountOutputType
+   */
+  select?: Prisma.ProjectMembershipCountOutputTypeSelect<ExtArgs> | null
+}
+
+/**
+ * ProjectMembershipCountOutputType without action
+ */
+export type ProjectMembershipCountOutputTypeCountAssignedTasksArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.TaskWhereInput
+}
+
 
 export type ProjectMembershipSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
   id?: boolean
@@ -530,6 +639,8 @@ export type ProjectMembershipSelect<ExtArgs extends runtime.Types.Extensions.Int
   joinedAt?: boolean
   project?: boolean | Prisma.ProjectDefaultArgs<ExtArgs>
   user?: boolean | Prisma.UserDefaultArgs<ExtArgs>
+  assignedTasks?: boolean | Prisma.ProjectMembership$assignedTasksArgs<ExtArgs>
+  _count?: boolean | Prisma.ProjectMembershipCountOutputTypeDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["projectMembership"]>
 
 export type ProjectMembershipSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
@@ -561,6 +672,8 @@ export type ProjectMembershipOmit<ExtArgs extends runtime.Types.Extensions.Inter
 export type ProjectMembershipInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   project?: boolean | Prisma.ProjectDefaultArgs<ExtArgs>
   user?: boolean | Prisma.UserDefaultArgs<ExtArgs>
+  assignedTasks?: boolean | Prisma.ProjectMembership$assignedTasksArgs<ExtArgs>
+  _count?: boolean | Prisma.ProjectMembershipCountOutputTypeDefaultArgs<ExtArgs>
 }
 export type ProjectMembershipIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   project?: boolean | Prisma.ProjectDefaultArgs<ExtArgs>
@@ -576,6 +689,7 @@ export type $ProjectMembershipPayload<ExtArgs extends runtime.Types.Extensions.I
   objects: {
     project: Prisma.$ProjectPayload<ExtArgs>
     user: Prisma.$UserPayload<ExtArgs>
+    assignedTasks: Prisma.$TaskPayload<ExtArgs>[]
   }
   scalars: runtime.Types.Extensions.GetPayloadResult<{
     id: string
@@ -978,6 +1092,7 @@ export interface Prisma__ProjectMembershipClient<T, Null = never, ExtArgs extend
   readonly [Symbol.toStringTag]: "PrismaPromise"
   project<T extends Prisma.ProjectDefaultArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.ProjectDefaultArgs<ExtArgs>>): Prisma.Prisma__ProjectClient<runtime.Types.Result.GetResult<Prisma.$ProjectPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
   user<T extends Prisma.UserDefaultArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.UserDefaultArgs<ExtArgs>>): Prisma.Prisma__UserClient<runtime.Types.Result.GetResult<Prisma.$UserPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
+  assignedTasks<T extends Prisma.ProjectMembership$assignedTasksArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.ProjectMembership$assignedTasksArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$TaskPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   /**
    * Attaches callbacks for the resolution and/or rejection of the Promise.
    * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -1409,6 +1524,30 @@ export type ProjectMembershipDeleteManyArgs<ExtArgs extends runtime.Types.Extens
    * Limit how many ProjectMemberships to delete.
    */
   limit?: number
+}
+
+/**
+ * ProjectMembership.assignedTasks
+ */
+export type ProjectMembership$assignedTasksArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the Task
+   */
+  select?: Prisma.TaskSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the Task
+   */
+  omit?: Prisma.TaskOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.TaskInclude<ExtArgs> | null
+  where?: Prisma.TaskWhereInput
+  orderBy?: Prisma.TaskOrderByWithRelationInput | Prisma.TaskOrderByWithRelationInput[]
+  cursor?: Prisma.TaskWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.TaskScalarFieldEnum | Prisma.TaskScalarFieldEnum[]
 }
 
 /**

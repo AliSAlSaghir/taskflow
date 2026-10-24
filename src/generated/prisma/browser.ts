@@ -46,3 +46,8 @@ export type Project = Prisma.ProjectModel;
  *
  */
 export type ProjectMembership = Prisma.ProjectMembershipModel;
+/**
+ * Model Task
+ *
+ */
+export type Task = Prisma.TaskModel;

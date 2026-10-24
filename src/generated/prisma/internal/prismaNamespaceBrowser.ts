@@ -56,7 +56,8 @@ export const ModelName = {
   AuthSession: 'AuthSession',
   RefreshToken: 'RefreshToken',
   Project: 'Project',
-  ProjectMembership: 'ProjectMembership'
+  ProjectMembership: 'ProjectMembership',
+  Task: 'Task'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -147,6 +148,23 @@ export const ProjectMembershipScalarFieldEnum = {
 } as const
 
 export type ProjectMembershipScalarFieldEnum = (typeof ProjectMembershipScalarFieldEnum)[keyof typeof ProjectMembershipScalarFieldEnum]
+
+
+export const TaskScalarFieldEnum = {
+  id: 'id',
+  projectId: 'projectId',
+  title: 'title',
+  description: 'description',
+  status: 'status',
+  priority: 'priority',
+  assigneeId: 'assigneeId',
+  dueDate: 'dueDate',
+  archivedAt: 'archivedAt',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type TaskScalarFieldEnum = (typeof TaskScalarFieldEnum)[keyof typeof TaskScalarFieldEnum]
 
 
 export const SortOrder = {
