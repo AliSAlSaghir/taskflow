@@ -8,7 +8,10 @@ import {
   archiveProjectController,
   unarchiveProjectController,
 } from "./project.controller.js";
-import { addProjectMemberController } from "./membership.controller.js";
+import {
+  addProjectMemberController,
+  listProjectMembersController,
+} from "./membership.controller.js";
 
 const projectRouter = Router();
 
@@ -27,6 +30,11 @@ projectRouter.post(
   "/:projectId/members",
   requireAuth,
   addProjectMemberController,
+);
+projectRouter.get(
+  "/:projectId/members",
+  requireAuth,
+  listProjectMembersController,
 );
 
 export { projectRouter };

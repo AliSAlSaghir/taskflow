@@ -60,8 +60,16 @@ export const addProjectMemberSchema = z
   })
   .strict();
 
+export const listProjectMembersQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(10),
+});
+
 export type CreateProjectInput = z.infer<typeof createProjectSchema>;
 export type ListProjectsQuery = z.infer<typeof listProjectsQuerySchema>;
 export type UpdateProjectInput = z.infer<typeof updateProjectSchema>;
 
 export type AddProjectMemberInput = z.infer<typeof addProjectMemberSchema>;
+export type ListProjectMembersQuery = z.infer<
+  typeof listProjectMembersQuerySchema
+>;

@@ -253,3 +253,152 @@ describe("POST /api/v1/projects/:projectId/members", () => {
     expect(response.body.error.code).toBe("VALIDATION_ERROR");
   });
 });
+
+describe("GET /api/v1/projects/:projectId/members", () => {
+  it("lists project members without including the owner", async () => {
+    const owner = await createLoggedInUser();
+    const member = await createLoggedInUser();
+    const project = await createProject(owner.userId);
+
+    await prisma.projectMembership.create({
+      data: {
+        projectId: project.id,
+        userId: member.userId,
+      },
+    });
+
+    const response = await request(app)
+      .get(`/api/v1/projects/${project.id}/members`)
+      .set("Cookie", owner.accessCookie);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toHaveLength(1);
+    expect(response.body.data[0]).toMatchObject({
+      userId: member.userId,
+      user: {
+        email: member.email,
+        profile: { displayName: "Membership Test" },
+      },
+    });
+    expect(response.body.data[0].userId).not.toBe(owner.userId);
+    expect(response.body.pagination).toEqual({
+      page: 1,
+      limit: 10,
+      totalItems: 1,
+      totalPages: 1,
+    });
+    expect(response.body.data[0]).not.toHaveProperty("passwordHash");
+  });
+  it("returns 404 when a non-owner tries to list project members", async () => {
+    const owner = await createLoggedInUser();
+    const otherUser = await createLoggedInUser();
+    const project = await createProject(owner.userId);
+
+    const response = await request(app)
+      .get(`/api/v1/projects/${project.id}/members`)
+      .set("Cookie", otherUser.accessCookie);
+
+    expect(response.status).toBe(404);
+    expect(response.body.error.code).toBe("NOT_FOUND");
+  });
+
+  it("returns 404 when listing members of an archived project", async () => {
+    const owner = await createLoggedInUser();
+    const project = await createProject(owner.userId);
+
+    await prisma.project.update({
+      where: { id: project.id },
+      data: { archivedAt: new Date() },
+    });
+
+    const response = await request(app)
+      .get(`/api/v1/projects/${project.id}/members`)
+      .set("Cookie", owner.accessCookie);
+
+    expect(response.status).toBe(404);
+    expect(response.body.error.code).toBe("NOT_FOUND");
+  });
+
+  it("returns 400 for an invalid project ID", async () => {
+    const owner = await createLoggedInUser();
+
+    const response = await request(app)
+      .get("/api/v1/projects/not-a-uuid/members")
+      .set("Cookie", owner.accessCookie);
+
+    expect(response.status).toBe(400);
+  });
+
+  it("returns 401 when the request is unauthenticated", async () => {
+    const response = await request(app).get(
+      `/api/v1/projects/${randomUUID()}/members`,
+    );
+
+    expect(response.status).toBe(401);
+  });
+  it("returns an empty list when the project has no members", async () => {
+    const owner = await createLoggedInUser();
+    const project = await createProject(owner.userId);
+
+    const response = await request(app)
+      .get(`/api/v1/projects/${project.id}/members`)
+      .set("Cookie", owner.accessCookie);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toEqual([]);
+    expect(response.body.pagination).toEqual({
+      page: 1,
+      limit: 10,
+      totalItems: 0,
+      totalPages: 0,
+    });
+  });
+  it("paginates the project member list", async () => {
+    const owner = await createLoggedInUser();
+    const members = await Promise.all([
+      createLoggedInUser(),
+      createLoggedInUser(),
+      createLoggedInUser(),
+    ]);
+    const project = await createProject(owner.userId);
+
+    for (const member of members) {
+      await prisma.projectMembership.create({
+        data: {
+          projectId: project.id,
+          userId: member.userId,
+        },
+      });
+    }
+
+    const response = await request(app)
+      .get(`/api/v1/projects/${project.id}/members?page=2&limit=2`)
+      .set("Cookie", owner.accessCookie);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toHaveLength(1);
+    expect(response.body.pagination).toEqual({
+      page: 2,
+      limit: 2,
+      totalItems: 3,
+      totalPages: 2,
+    });
+  });
+
+  it.each([
+    ["page=0", "?page=0"],
+    ["negative page", "?page=-1"],
+    ["limit=0", "?limit=0"],
+    ["limit above maximum", "?limit=101"],
+    ["non-numeric page", "?page=abc"],
+  ])("returns 400 for %s", async (_description, query) => {
+    const owner = await createLoggedInUser();
+    const project = await createProject(owner.userId);
+
+    const response = await request(app)
+      .get(`/api/v1/projects/${project.id}/members${query}`)
+      .set("Cookie", owner.accessCookie);
+
+    expect(response.status).toBe(400);
+  });
+});

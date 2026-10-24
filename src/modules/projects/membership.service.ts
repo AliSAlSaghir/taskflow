@@ -5,6 +5,7 @@ import {
   MembershipAlreadyExistsError,
   ProjectNotFoundError,
 } from "./membership.errors.js";
+import type { ListProjectMembersQuery } from "./project.schema.js";
 
 export async function addProjectMember(
   ownerId: string,
@@ -84,4 +85,64 @@ export async function addProjectMember(
 
     throw error;
   }
+}
+
+export async function listProjectMembers(
+  ownerId: string,
+  projectId: string,
+  query: ListProjectMembersQuery,
+) {
+  const project = await prisma.project.findFirst({
+    where: {
+      id: projectId,
+      ownerId,
+      archivedAt: null,
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  if (!project) {
+    throw new ProjectNotFoundError();
+  }
+
+  const where = {
+    projectId: project.id,
+  };
+
+  const [members, totalItems] = await prisma.$transaction([
+    prisma.projectMembership.findMany({
+      where,
+      orderBy: [{ joinedAt: "asc" }, { id: "asc" }],
+      skip: (query.page - 1) * query.limit,
+      take: query.limit,
+      select: {
+        id: true,
+        userId: true,
+        joinedAt: true,
+        user: {
+          select: {
+            email: true,
+            profile: {
+              select: {
+                displayName: true,
+              },
+            },
+          },
+        },
+      },
+    }),
+    prisma.projectMembership.count({ where }),
+  ]);
+
+  return {
+    data: members,
+    pagination: {
+      page: query.page,
+      limit: query.limit,
+      totalItems,
+      totalPages: Math.ceil(totalItems / query.limit),
+    },
+  };
 }
