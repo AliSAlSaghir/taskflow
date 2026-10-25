@@ -11,7 +11,13 @@ import {
   TaskNotFoundError,
   TaskUpdateForbiddenError,
 } from "./task.errors.js";
-import { createTask, listTasks, updateTask } from "./task.service.js";
+import {
+  archiveTask,
+  createTask,
+  listTasks,
+  restoreTask,
+  updateTask,
+} from "./task.service.js";
 
 export const createTaskController: RequestHandler = async (req, res, next) => {
   const projectIdResult = projectIdSchema.safeParse(req.params.projectId);
@@ -206,6 +212,114 @@ export const updateTaskController: RequestHandler = async (req, res, next) => {
         error: {
           code: "FORBIDDEN",
           message: "You are not allowed to update this task.",
+        },
+      });
+      return;
+    }
+
+    next(error);
+  }
+};
+
+export const archiveTaskController: RequestHandler = async (req, res, next) => {
+  const projectIdResult = projectIdSchema.safeParse(req.params.projectId);
+  const taskIdResult = projectIdSchema.safeParse(req.params.taskId);
+
+  if (!projectIdResult.success || !taskIdResult.success) {
+    res.status(400).json({
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "Request validation failed.",
+        details: [
+          ...(!projectIdResult.success
+            ? projectIdResult.error.issues.map((issue) => ({
+                field: "projectId",
+                message: issue.message,
+              }))
+            : []),
+          ...(!taskIdResult.success
+            ? taskIdResult.error.issues.map((issue) => ({
+                field: "taskId",
+                message: issue.message,
+              }))
+            : []),
+        ],
+      },
+    });
+    return;
+  }
+
+  try {
+    const task = await archiveTask(
+      res.locals.user.id,
+      projectIdResult.data,
+      taskIdResult.data,
+    );
+
+    res.status(200).json({ data: task });
+  } catch (error: unknown) {
+    if (
+      error instanceof ProjectNotFoundError ||
+      error instanceof TaskNotFoundError
+    ) {
+      res.status(404).json({
+        error: {
+          code: "NOT_FOUND",
+          message: "The requested resource was not found.",
+        },
+      });
+      return;
+    }
+
+    next(error);
+  }
+};
+
+export const restoreTaskController: RequestHandler = async (req, res, next) => {
+  const projectIdResult = projectIdSchema.safeParse(req.params.projectId);
+  const taskIdResult = projectIdSchema.safeParse(req.params.taskId);
+
+  if (!projectIdResult.success || !taskIdResult.success) {
+    res.status(400).json({
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "Request validation failed.",
+        details: [
+          ...(!projectIdResult.success
+            ? projectIdResult.error.issues.map((issue) => ({
+                field: "projectId",
+                message: issue.message,
+              }))
+            : []),
+          ...(!taskIdResult.success
+            ? taskIdResult.error.issues.map((issue) => ({
+                field: "taskId",
+                message: issue.message,
+              }))
+            : []),
+        ],
+      },
+    });
+    return;
+  }
+
+  try {
+    const task = await restoreTask(
+      res.locals.user.id,
+      projectIdResult.data,
+      taskIdResult.data,
+    );
+
+    res.status(200).json({ data: task });
+  } catch (error: unknown) {
+    if (
+      error instanceof ProjectNotFoundError ||
+      error instanceof TaskNotFoundError
+    ) {
+      res.status(404).json({
+        error: {
+          code: "NOT_FOUND",
+          message: "The requested resource was not found.",
         },
       });
       return;

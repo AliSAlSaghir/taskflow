@@ -272,3 +272,125 @@ export async function updateTask(
     },
   });
 }
+
+export async function archiveTask(
+  ownerId: string,
+  projectId: string,
+  taskId: string,
+) {
+  const project = await prisma.project.findFirst({
+    where: {
+      id: projectId,
+      ownerId,
+      archivedAt: null,
+    },
+    select: { id: true },
+  });
+
+  if (!project) {
+    throw new ProjectNotFoundError();
+  }
+
+  const task = await prisma.task.findFirst({
+    where: {
+      id: taskId,
+      projectId: project.id,
+    },
+  });
+
+  if (!task) {
+    throw new TaskNotFoundError();
+  }
+
+  // Repeated archive requests are safe.
+  if (task.archivedAt !== null) {
+    return task;
+  }
+
+  await prisma.task.updateMany({
+    where: {
+      id: task.id,
+      projectId: project.id,
+      archivedAt: null,
+    },
+    data: { archivedAt: new Date() },
+  });
+
+  return prisma.task.findUniqueOrThrow({
+    where: { id: task.id },
+    select: {
+      id: true,
+      projectId: true,
+      title: true,
+      description: true,
+      status: true,
+      priority: true,
+      assigneeId: true,
+      dueDate: true,
+      archivedAt: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  });
+}
+
+export async function restoreTask(
+  ownerId: string,
+  projectId: string,
+  taskId: string,
+) {
+  const project = await prisma.project.findFirst({
+    where: {
+      id: projectId,
+      ownerId,
+      archivedAt: null,
+    },
+    select: { id: true },
+  });
+
+  if (!project) {
+    throw new ProjectNotFoundError();
+  }
+
+  const task = await prisma.task.findFirst({
+    where: {
+      id: taskId,
+      projectId: project.id,
+    },
+  });
+
+  if (!task) {
+    throw new TaskNotFoundError();
+  }
+
+  // Repeated restore requests are safe.
+  if (task.archivedAt === null) {
+    return task;
+  }
+
+  await prisma.task.updateMany({
+    where: {
+      id: task.id,
+      projectId: project.id,
+      archivedAt: { not: null },
+    },
+    data: { archivedAt: null },
+  });
+
+  return prisma.task.findUniqueOrThrow({
+    where: { id: task.id },
+    select: {
+      id: true,
+      projectId: true,
+      title: true,
+      description: true,
+      status: true,
+      priority: true,
+      assigneeId: true,
+      dueDate: true,
+      archivedAt: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  });
+}

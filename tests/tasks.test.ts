@@ -1099,3 +1099,299 @@ describe("PATCH /api/v1/projects/:projectId/tasks/:taskId", () => {
     expect(unchangedTask.assigneeId).toBeNull();
   });
 });
+
+describe("DELETE /api/v1/projects/:projectId/tasks/:taskId", () => {
+  it("allows the owner to archive a task", async () => {
+    const owner = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "Task Archive Test",
+      },
+    });
+
+    const task = await prisma.task.create({
+      data: {
+        projectId: project.id,
+        title: "Task to archive",
+      },
+    });
+
+    const response = await request(app)
+      .delete(`/api/v1/projects/${project.id}/tasks/${task.id}`)
+      .set("Cookie", owner.accessCookie);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.id).toBe(task.id);
+    expect(response.body.data.archivedAt).not.toBeNull();
+
+    const archivedTask = await prisma.task.findUniqueOrThrow({
+      where: { id: task.id },
+    });
+
+    expect(archivedTask.archivedAt).not.toBeNull();
+  });
+
+  it("does not allow a non-owner to archive a task", async () => {
+    const owner = await createLoggedInUser();
+    const otherUser = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "Task Archive Permission Test",
+      },
+    });
+
+    const task = await prisma.task.create({
+      data: {
+        projectId: project.id,
+        title: "Task owned by another user",
+      },
+    });
+
+    const response = await request(app)
+      .delete(`/api/v1/projects/${project.id}/tasks/${task.id}`)
+      .set("Cookie", otherUser.accessCookie);
+
+    expect(response.status).toBe(404);
+    expect(response.body.error.code).toBe("NOT_FOUND");
+
+    const unchangedTask = await prisma.task.findUniqueOrThrow({
+      where: { id: task.id },
+    });
+
+    expect(unchangedTask.archivedAt).toBeNull();
+  });
+
+  it("returns 404 when the task does not exist", async () => {
+    const owner = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "Missing Task Archive Test",
+      },
+    });
+
+    const response = await request(app)
+      .delete(`/api/v1/projects/${project.id}/tasks/${randomUUID()}`)
+      .set("Cookie", owner.accessCookie);
+
+    expect(response.status).toBe(404);
+    expect(response.body.error.code).toBe("NOT_FOUND");
+  });
+
+  it("allows archiving a task that is already archived", async () => {
+    const owner = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "Repeated Archive Test",
+      },
+    });
+
+    const task = await prisma.task.create({
+      data: {
+        projectId: project.id,
+        title: "Already archived",
+        archivedAt: new Date(),
+      },
+    });
+
+    const response = await request(app)
+      .delete(`/api/v1/projects/${project.id}/tasks/${task.id}`)
+      .set("Cookie", owner.accessCookie);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.archivedAt).not.toBeNull();
+  });
+
+  it("does not allow archiving a task in an archived project", async () => {
+    const owner = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "Archived Project Task Test",
+        archivedAt: new Date(),
+      },
+    });
+
+    const task = await prisma.task.create({
+      data: {
+        projectId: project.id,
+        title: "Task in archived project",
+      },
+    });
+
+    const response = await request(app)
+      .delete(`/api/v1/projects/${project.id}/tasks/${task.id}`)
+      .set("Cookie", owner.accessCookie);
+
+    expect(response.status).toBe(404);
+    expect(response.body.error.code).toBe("NOT_FOUND");
+
+    const unchangedTask = await prisma.task.findUniqueOrThrow({
+      where: { id: task.id },
+    });
+
+    expect(unchangedTask.archivedAt).toBeNull();
+  });
+
+  it("rejects unauthenticated archive requests", async () => {
+    const owner = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "Unauthenticated Archive Test",
+      },
+    });
+
+    const task = await prisma.task.create({
+      data: {
+        projectId: project.id,
+        title: "Task requiring authentication",
+      },
+    });
+
+    const response = await request(app).delete(
+      `/api/v1/projects/${project.id}/tasks/${task.id}`,
+    );
+
+    expect(response.status).toBe(401);
+  });
+});
+
+describe("POST /api/v1/projects/:projectId/tasks/:taskId/restore", () => {
+  it("allows the owner to restore an archived task and preserves its data", async () => {
+    const owner = await createLoggedInUser();
+    const member = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "Task Restore Test",
+      },
+    });
+
+    await prisma.projectMembership.create({
+      data: {
+        projectId: project.id,
+        userId: member.userId,
+      },
+    });
+
+    const task = await prisma.task.create({
+      data: {
+        projectId: project.id,
+        title: "Archived task",
+        status: "IN_PROGRESS",
+        priority: "HIGH",
+        assigneeId: member.userId,
+        archivedAt: new Date(),
+      },
+    });
+
+    const response = await request(app)
+      .post(`/api/v1/projects/${project.id}/tasks/${task.id}/restore`)
+      .set("Cookie", owner.accessCookie);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toMatchObject({
+      id: task.id,
+      title: "Archived task",
+      status: "IN_PROGRESS",
+      priority: "HIGH",
+      assigneeId: member.userId,
+      archivedAt: null,
+    });
+
+    const restoredTask = await prisma.task.findUniqueOrThrow({
+      where: { id: task.id },
+    });
+
+    expect(restoredTask.archivedAt).toBeNull();
+    expect(restoredTask.status).toBe("IN_PROGRESS");
+    expect(restoredTask.assigneeId).toBe(member.userId);
+  });
+
+  it("does not allow a non-owner to restore a task", async () => {
+    const owner = await createLoggedInUser();
+    const otherUser = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "Task Restore Permission Test",
+      },
+    });
+
+    const task = await prisma.task.create({
+      data: {
+        projectId: project.id,
+        title: "Archived task",
+        archivedAt: new Date(),
+      },
+    });
+
+    const response = await request(app)
+      .post(`/api/v1/projects/${project.id}/tasks/${task.id}/restore`)
+      .set("Cookie", otherUser.accessCookie);
+
+    expect(response.status).toBe(404);
+    expect(response.body.error.code).toBe("NOT_FOUND");
+
+    const unchangedTask = await prisma.task.findUniqueOrThrow({
+      where: { id: task.id },
+    });
+
+    expect(unchangedTask.archivedAt).not.toBeNull();
+  });
+
+  it("returns 404 when the task does not exist", async () => {
+    const owner = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "Missing Task Restore Test",
+      },
+    });
+
+    const response = await request(app)
+      .post(`/api/v1/projects/${project.id}/tasks/${randomUUID()}/restore`)
+      .set("Cookie", owner.accessCookie);
+
+    expect(response.status).toBe(404);
+    expect(response.body.error.code).toBe("NOT_FOUND");
+  });
+
+  it("allows restoring a task that is already active", async () => {
+    const owner = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "Idempotent Task Restore Test",
+      },
+    });
+
+    const task = await prisma.task.create({
+      data: {
+        projectId: project.id,
+        title: "Already active task",
+      },
+    });
+
+    const response = await request(app)
+      .post(`/api/v1/projects/${project.id}/tasks/${task.id}/restore`)
+      .set("Cookie", owner.accessCookie);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.archivedAt).toBeNull();
+  });
+});

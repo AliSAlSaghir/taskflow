@@ -14,8 +14,10 @@ import {
   removeProjectMemberController,
 } from "./membership.controller.js";
 import {
+  archiveTaskController,
   createTaskController,
   listTasksController,
+  restoreTaskController,
   updateTaskController,
 } from "../tasks/task.controller.js";
 
@@ -54,6 +56,18 @@ projectRouter.patch(
   "/:projectId/tasks/:taskId",
   requireAuth,
   updateTaskController,
+);
+
+projectRouter.delete(
+  "/:projectId/tasks/:taskId",
+  requireAuth,
+  archiveTaskController,
+);
+
+projectRouter.post(
+  "/:projectId/tasks/:taskId/restore",
+  requireAuth,
+  restoreTaskController,
 );
 
 export { projectRouter };
