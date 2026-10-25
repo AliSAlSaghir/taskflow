@@ -16,6 +16,7 @@ import {
 import {
   createTaskController,
   listTasksController,
+  updateTaskController,
 } from "../tasks/task.controller.js";
 
 const projectRouter = Router();
@@ -49,5 +50,10 @@ projectRouter.delete(
 
 projectRouter.post("/:projectId/tasks", requireAuth, createTaskController);
 projectRouter.get("/:projectId/tasks", requireAuth, listTasksController);
+projectRouter.patch(
+  "/:projectId/tasks/:taskId",
+  requireAuth,
+  updateTaskController,
+);
 
 export { projectRouter };

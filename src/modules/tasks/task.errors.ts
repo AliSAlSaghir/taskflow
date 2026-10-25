@@ -11,3 +11,17 @@ export class TaskAssigneeNotEligibleError extends Error {
     this.name = "TaskAssigneeNotEligibleError";
   }
 }
+
+export class TaskNotFoundError extends Error {
+  constructor() {
+    super("The requested task was not found.");
+    this.name = "TaskNotFoundError";
+  }
+}
+
+export class TaskUpdateForbiddenError extends Error {
+  constructor() {
+    super("You are not allowed to update this task.");
+    this.name = "TaskUpdateForbiddenError";
+  }
+}

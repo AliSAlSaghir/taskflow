@@ -3,6 +3,61 @@ import request from "supertest";
 import { afterEach, describe, expect, it } from "vitest";
 import { app } from "../src/app/app.js";
 import { prisma } from "../src/infrastructure/database/prisma.js";
+import {
+  updateTaskSchema,
+  updateTaskStatusSchema,
+} from "../src/modules/tasks/task.schema.js";
+
+describe("Task update schemas", () => {
+  describe("updateTaskSchema", () => {
+    it("accepts a partial owner update", () => {
+      expect(
+        updateTaskSchema.safeParse({ title: "Updated title" }).success,
+      ).toBe(true);
+    });
+
+    it("accepts null for nullable fields", () => {
+      expect(
+        updateTaskSchema.safeParse({
+          description: null,
+          assigneeId: null,
+          dueDate: null,
+        }).success,
+      ).toBe(true);
+    });
+
+    it("rejects an empty update", () => {
+      expect(updateTaskSchema.safeParse({}).success).toBe(false);
+    });
+
+    it("rejects unknown fields", () => {
+      expect(
+        updateTaskSchema.safeParse({ unexpectedField: "value" }).success,
+      ).toBe(false);
+    });
+  });
+
+  describe("updateTaskStatusSchema", () => {
+    it("accepts a valid status update", () => {
+      expect(
+        updateTaskStatusSchema.safeParse({ status: "IN_PROGRESS" }).success,
+      ).toBe(true);
+    });
+
+    it("rejects a request without status", () => {
+      expect(updateTaskStatusSchema.safeParse({}).success).toBe(false);
+    });
+
+    it("rejects additional fields", () => {
+      expect(
+        updateTaskStatusSchema.safeParse({
+          status: "COMPLETED",
+          title: "Unauthorized title change",
+        }).success,
+      ).toBe(false);
+    });
+  });
+});
 
 const emailsToClean: string[] = [];
 
@@ -633,5 +688,414 @@ describe("GET /api/v1/projects/:projectId/tasks", () => {
 
     expect(response.status).toBe(404);
     expect(response.body.error.code).toBe("NOT_FOUND");
+  });
+});
+
+describe("PATCH /api/v1/projects/:projectId/tasks/:taskId", () => {
+  it("allows the project owner to update task details", async () => {
+    const owner = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "Task Update Test Project",
+      },
+    });
+
+    const task = await prisma.task.create({
+      data: {
+        projectId: project.id,
+        title: "Original title",
+      },
+    });
+
+    const response = await request(app)
+      .patch(`/api/v1/projects/${project.id}/tasks/${task.id}`)
+      .set("Cookie", owner.accessCookie)
+      .send({
+        title: "Updated title",
+        priority: "HIGH",
+        description: "Updated description",
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toMatchObject({
+      id: task.id,
+      projectId: project.id,
+      title: "Updated title",
+      priority: "HIGH",
+      description: "Updated description",
+      status: "PENDING",
+    });
+
+    const updatedTask = await prisma.task.findUniqueOrThrow({
+      where: { id: task.id },
+    });
+
+    expect(updatedTask.title).toBe("Updated title");
+    expect(updatedTask.priority).toBe("HIGH");
+    expect(updatedTask.description).toBe("Updated description");
+  });
+
+  it("allows the owner to clear nullable task fields", async () => {
+    const owner = await createLoggedInUser();
+    const member = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "Clear Task Fields Test",
+      },
+    });
+
+    await prisma.projectMembership.create({
+      data: {
+        projectId: project.id,
+        userId: member.userId,
+      },
+    });
+
+    const task = await prisma.task.create({
+      data: {
+        projectId: project.id,
+        title: "Task with optional fields",
+        description: "Remove this description",
+        assigneeId: member.userId,
+        dueDate: new Date("2026-12-31T00:00:00.000Z"),
+      },
+    });
+
+    const response = await request(app)
+      .patch(`/api/v1/projects/${project.id}/tasks/${task.id}`)
+      .set("Cookie", owner.accessCookie)
+      .send({
+        description: null,
+        assigneeId: null,
+        dueDate: null,
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toMatchObject({
+      id: task.id,
+      description: null,
+      assigneeId: null,
+      dueDate: null,
+    });
+
+    const updatedTask = await prisma.task.findUniqueOrThrow({
+      where: { id: task.id },
+    });
+
+    expect(updatedTask.description).toBeNull();
+    expect(updatedTask.assigneeId).toBeNull();
+    expect(updatedTask.dueDate).toBeNull();
+  });
+  it("allows an assigned member to update task status", async () => {
+    const owner = await createLoggedInUser();
+    const member = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "Member Status Update Test",
+      },
+    });
+
+    await prisma.projectMembership.create({
+      data: {
+        projectId: project.id,
+        userId: member.userId,
+      },
+    });
+
+    const task = await prisma.task.create({
+      data: {
+        projectId: project.id,
+        title: "Assigned task",
+        assigneeId: member.userId,
+      },
+    });
+
+    const response = await request(app)
+      .patch(`/api/v1/projects/${project.id}/tasks/${task.id}`)
+      .set("Cookie", member.accessCookie)
+      .send({ status: "IN_PROGRESS" });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.status).toBe("IN_PROGRESS");
+
+    const updatedTask = await prisma.task.findUniqueOrThrow({
+      where: { id: task.id },
+    });
+
+    expect(updatedTask.status).toBe("IN_PROGRESS");
+  });
+
+  it("forbids a member from changing task details", async () => {
+    const owner = await createLoggedInUser();
+    const member = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "Member Forbidden Update Test",
+      },
+    });
+
+    await prisma.projectMembership.create({
+      data: {
+        projectId: project.id,
+        userId: member.userId,
+      },
+    });
+
+    const task = await prisma.task.create({
+      data: {
+        projectId: project.id,
+        title: "Original title",
+        assigneeId: member.userId,
+      },
+    });
+
+    const response = await request(app)
+      .patch(`/api/v1/projects/${project.id}/tasks/${task.id}`)
+      .set("Cookie", member.accessCookie)
+      .send({
+        title: "Unauthorized title",
+        priority: "HIGH",
+      });
+
+    expect(response.status).toBe(403);
+    expect(response.body.error.code).toBe("FORBIDDEN");
+
+    const unchangedTask = await prisma.task.findUniqueOrThrow({
+      where: { id: task.id },
+    });
+
+    expect(unchangedTask.title).toBe("Original title");
+    expect(unchangedTask.priority).toBe("MEDIUM");
+  });
+
+  it("forbids a member from updating a task assigned to someone else", async () => {
+    const owner = await createLoggedInUser();
+    const assignedMember = await createLoggedInUser();
+    const otherMember = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "Wrong Assignee Update Test",
+      },
+    });
+
+    await prisma.projectMembership.createMany({
+      data: [
+        { projectId: project.id, userId: assignedMember.userId },
+        { projectId: project.id, userId: otherMember.userId },
+      ],
+    });
+
+    const task = await prisma.task.create({
+      data: {
+        projectId: project.id,
+        title: "Another member's task",
+        assigneeId: assignedMember.userId,
+      },
+    });
+
+    const response = await request(app)
+      .patch(`/api/v1/projects/${project.id}/tasks/${task.id}`)
+      .set("Cookie", otherMember.accessCookie)
+      .send({ status: "COMPLETED" });
+
+    expect(response.status).toBe(403);
+    expect(response.body.error.code).toBe("FORBIDDEN");
+
+    const unchangedTask = await prisma.task.findUniqueOrThrow({
+      where: { id: task.id },
+    });
+
+    expect(unchangedTask.status).toBe("PENDING");
+  });
+  it("rejects an invalid task ID", async () => {
+    const owner = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "Invalid Task ID Test",
+      },
+    });
+
+    const response = await request(app)
+      .patch(`/api/v1/projects/${project.id}/tasks/not-a-uuid`)
+      .set("Cookie", owner.accessCookie)
+      .send({ title: "Updated title" });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("rejects an empty update body", async () => {
+    const owner = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "Empty Update Test",
+      },
+    });
+
+    const task = await prisma.task.create({
+      data: {
+        projectId: project.id,
+        title: "Original title",
+      },
+    });
+
+    const response = await request(app)
+      .patch(`/api/v1/projects/${project.id}/tasks/${task.id}`)
+      .set("Cookie", owner.accessCookie)
+      .send({});
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("returns not found for a task that does not exist", async () => {
+    const owner = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "Missing Task Test",
+      },
+    });
+
+    const response = await request(app)
+      .patch(`/api/v1/projects/${project.id}/tasks/${randomUUID()}`)
+      .set("Cookie", owner.accessCookie)
+      .send({ title: "Updated title" });
+
+    expect(response.status).toBe(404);
+    expect(response.body.error.code).toBe("NOT_FOUND");
+  });
+
+  it("does not allow updating tasks in an archived project", async () => {
+    const owner = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "Archived Task Update Test",
+        archivedAt: new Date(),
+      },
+    });
+
+    const task = await prisma.task.create({
+      data: {
+        projectId: project.id,
+        title: "Task in archived project",
+      },
+    });
+
+    const response = await request(app)
+      .patch(`/api/v1/projects/${project.id}/tasks/${task.id}`)
+      .set("Cookie", owner.accessCookie)
+      .send({ title: "Updated title" });
+
+    expect(response.status).toBe(404);
+    expect(response.body.error.code).toBe("NOT_FOUND");
+
+    const unchangedTask = await prisma.task.findUniqueOrThrow({
+      where: { id: task.id },
+    });
+
+    expect(unchangedTask.title).toBe("Task in archived project");
+  });
+  it("does not allow updating an archived task", async () => {
+    const owner = await createLoggedInUser();
+    const member = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "Archived Task Member Update Test",
+      },
+    });
+
+    await prisma.projectMembership.create({
+      data: {
+        projectId: project.id,
+        userId: member.userId,
+      },
+    });
+
+    const task = await prisma.task.create({
+      data: {
+        projectId: project.id,
+        title: "Archived task",
+        assigneeId: member.userId,
+        archivedAt: new Date(),
+      },
+    });
+
+    const response = await request(app)
+      .patch(`/api/v1/projects/${project.id}/tasks/${task.id}`)
+      .set("Cookie", member.accessCookie)
+      .send({ status: "COMPLETED" });
+
+    expect(response.status).toBe(404);
+    expect(response.body.error.code).toBe("NOT_FOUND");
+
+    const unchangedTask = await prisma.task.findUniqueOrThrow({
+      where: { id: task.id },
+    });
+
+    expect(unchangedTask.status).toBe("PENDING");
+  });
+  it("rejects assigning a task to a disabled project member", async () => {
+    const owner = await createLoggedInUser();
+    const member = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "Disabled Assignee Update Test",
+      },
+    });
+
+    await prisma.projectMembership.create({
+      data: {
+        projectId: project.id,
+        userId: member.userId,
+      },
+    });
+
+    await prisma.user.update({
+      where: { id: member.userId },
+      data: { status: "DISABLED" },
+    });
+
+    const task = await prisma.task.create({
+      data: {
+        projectId: project.id,
+        title: "Task without an assignee",
+      },
+    });
+
+    const response = await request(app)
+      .patch(`/api/v1/projects/${project.id}/tasks/${task.id}`)
+      .set("Cookie", owner.accessCookie)
+      .send({ assigneeId: member.userId });
+
+    expect(response.status).toBe(404);
+    expect(response.body.error.code).toBe("NOT_FOUND");
+
+    const unchangedTask = await prisma.task.findUniqueOrThrow({
+      where: { id: task.id },
+    });
+
+    expect(unchangedTask.assigneeId).toBeNull();
   });
 });
