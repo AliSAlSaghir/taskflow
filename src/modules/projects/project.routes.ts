@@ -13,6 +13,7 @@ import {
   listProjectMembersController,
   removeProjectMemberController,
 } from "./membership.controller.js";
+import { createTaskController } from "../tasks/task.controller.js";
 
 const projectRouter = Router();
 
@@ -42,5 +43,7 @@ projectRouter.delete(
   requireAuth,
   removeProjectMemberController,
 );
+
+projectRouter.post("/:projectId/tasks", requireAuth, createTaskController);
 
 export { projectRouter };
