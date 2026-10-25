@@ -1,6 +1,7 @@
 import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../../infrastructure/database/prisma.js";
 import {
+  MemberHasAssignedTasksError,
   MemberNotEligibleError,
   MembershipAlreadyExistsError,
   MembershipNotFoundError,
@@ -175,11 +176,23 @@ export async function removeProjectMember(
     },
     select: {
       id: true,
+      userId: true,
     },
   });
 
   if (!membership) {
     throw new MembershipNotFoundError();
+  }
+
+  const assignedTasks = await prisma.task.count({
+    where: {
+      projectId: project.id,
+      assigneeId: membership.userId,
+    },
+  });
+
+  if (assignedTasks > 0) {
+    throw new MemberHasAssignedTasksError();
   }
 
   await prisma.projectMembership.delete({

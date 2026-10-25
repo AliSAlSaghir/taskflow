@@ -25,3 +25,12 @@ export class MembershipNotFoundError extends Error {
     this.name = "MembershipNotFoundError";
   }
 }
+
+export class MemberHasAssignedTasksError extends Error {
+  constructor() {
+    super(
+      "The member has assigned tasks that must be reassigned or unassigned before removal.",
+    );
+    this.name = "MemberHasAssignedTasksError";
+  }
+}

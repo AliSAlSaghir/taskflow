@@ -15,6 +15,12 @@ afterEach(async () => {
 
     if (!user) continue;
 
+    await prisma.task.deleteMany({
+      where: {
+        OR: [{ project: { ownerId: user.id } }, { assigneeId: user.id }],
+      },
+    });
+
     await prisma.projectMembership.deleteMany({
       where: {
         OR: [{ project: { ownerId: user.id } }, { userId: user.id }],
@@ -552,5 +558,124 @@ describe("DELETE /api/v1/projects/:projectId/members/:membershipId", () => {
     );
 
     expect(response.status).toBe(401);
+  });
+
+  it("returns 409 when the member has active assigned tasks", async () => {
+    const owner = await createLoggedInUser();
+    const member = await createLoggedInUser();
+    const project = await createProject(owner.userId);
+
+    const membership = await prisma.projectMembership.create({
+      data: {
+        projectId: project.id,
+        userId: member.userId,
+      },
+    });
+
+    const task = await prisma.task.create({
+      data: {
+        projectId: project.id,
+        title: "Task assigned to member",
+        assigneeId: member.userId,
+      },
+    });
+
+    const response = await request(app)
+      .delete(`/api/v1/projects/${project.id}/members/${membership.id}`)
+      .set("Cookie", owner.accessCookie);
+
+    expect(response.status).toBe(409);
+    expect(response.body.error.code).toBe("MEMBER_HAS_ASSIGNED_TASKS");
+
+    const remainingMembership = await prisma.projectMembership.findUnique({
+      where: { id: membership.id },
+    });
+
+    expect(remainingMembership).not.toBeNull();
+
+    const unchangedTask = await prisma.task.findUniqueOrThrow({
+      where: { id: task.id },
+    });
+
+    expect(unchangedTask.assigneeId).toBe(member.userId);
+  });
+
+  it("allows removal after the member's task is unassigned", async () => {
+    const owner = await createLoggedInUser();
+    const member = await createLoggedInUser();
+    const project = await createProject(owner.userId);
+
+    const membership = await prisma.projectMembership.create({
+      data: {
+        projectId: project.id,
+        userId: member.userId,
+      },
+    });
+
+    const task = await prisma.task.create({
+      data: {
+        projectId: project.id,
+        title: "Task to unassign",
+        assigneeId: member.userId,
+      },
+    });
+
+    await prisma.task.update({
+      where: { id: task.id },
+      data: { assigneeId: null },
+    });
+
+    const response = await request(app)
+      .delete(`/api/v1/projects/${project.id}/members/${membership.id}`)
+      .set("Cookie", owner.accessCookie);
+
+    expect(response.status).toBe(204);
+
+    const remainingMembership = await prisma.projectMembership.findUnique({
+      where: { id: membership.id },
+    });
+
+    expect(remainingMembership).toBeNull();
+
+    const unchangedTask = await prisma.task.findUniqueOrThrow({
+      where: { id: task.id },
+    });
+
+    expect(unchangedTask.assigneeId).toBeNull();
+  });
+  it("returns 409 when the member has archived assigned tasks", async () => {
+    const owner = await createLoggedInUser();
+    const member = await createLoggedInUser();
+    const project = await createProject(owner.userId);
+
+    const membership = await prisma.projectMembership.create({
+      data: { projectId: project.id, userId: member.userId },
+    });
+
+    const task = await prisma.task.create({
+      data: {
+        projectId: project.id,
+        title: "Archived task assigned to member",
+        assigneeId: member.userId,
+        archivedAt: new Date(),
+      },
+    });
+
+    const response = await request(app)
+      .delete(`/api/v1/projects/${project.id}/members/${membership.id}`)
+      .set("Cookie", owner.accessCookie);
+
+    expect(response.status).toBe(409);
+    expect(response.body.error.code).toBe("MEMBER_HAS_ASSIGNED_TASKS");
+
+    const remainingMembership = await prisma.projectMembership.findUnique({
+      where: { id: membership.id },
+    });
+    expect(remainingMembership).not.toBeNull();
+
+    const unchangedTask = await prisma.task.findUniqueOrThrow({
+      where: { id: task.id },
+    });
+    expect(unchangedTask.assigneeId).toBe(member.userId);
   });
 });

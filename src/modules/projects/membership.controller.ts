@@ -5,6 +5,7 @@ import {
   projectIdSchema,
 } from "./project.schema.js";
 import {
+  MemberHasAssignedTasksError,
   MemberNotEligibleError,
   MembershipAlreadyExistsError,
   MembershipNotFoundError,
@@ -199,6 +200,17 @@ export const removeProjectMemberController: RequestHandler = async (
         error: {
           code: "NOT_FOUND",
           message: "The requested resource was not found.",
+        },
+      });
+      return;
+    }
+
+    if (error instanceof MemberHasAssignedTasksError) {
+      res.status(409).json({
+        error: {
+          code: "MEMBER_HAS_ASSIGNED_TASKS",
+          message:
+            "Reassign or unassign this member's tasks before removing them.",
         },
       });
       return;
