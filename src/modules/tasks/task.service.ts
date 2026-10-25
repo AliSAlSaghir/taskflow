@@ -1,5 +1,5 @@
 import { prisma } from "../../infrastructure/database/prisma.js";
-import type { CreateTaskInput } from "./task.schema.js";
+import type { CreateTaskInput, ListTasksQuery } from "./task.schema.js";
 import {
   ProjectNotFoundError,
   TaskAssigneeNotEligibleError,
@@ -69,4 +69,76 @@ export async function createTask(
       updatedAt: true,
     },
   });
+}
+
+export async function listTasks(
+  userId: string,
+  projectId: string,
+  query: ListTasksQuery,
+) {
+  const project = await prisma.project.findFirst({
+    where: {
+      id: projectId,
+      archivedAt: null,
+      OR: [
+        { ownerId: userId },
+        {
+          memberships: {
+            some: {
+              userId,
+              user: { status: "ACTIVE" },
+            },
+          },
+        },
+      ],
+    },
+    select: { id: true },
+  });
+
+  if (!project) {
+    throw new ProjectNotFoundError();
+  }
+
+  const where = {
+    projectId: project.id,
+    archivedAt: null,
+    ...(query.status !== undefined && { status: query.status }),
+    ...(query.priority !== undefined && { priority: query.priority }),
+    ...(query.assigneeId !== undefined && {
+      assigneeId: query.assigneeId,
+    }),
+  };
+
+  const [tasks, totalItems] = await prisma.$transaction([
+    prisma.task.findMany({
+      where,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      skip: (query.page - 1) * query.limit,
+      take: query.limit,
+      select: {
+        id: true,
+        projectId: true,
+        title: true,
+        description: true,
+        status: true,
+        priority: true,
+        assigneeId: true,
+        dueDate: true,
+        archivedAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    }),
+    prisma.task.count({ where }),
+  ]);
+
+  return {
+    data: tasks,
+    pagination: {
+      page: query.page,
+      limit: query.limit,
+      totalItems,
+      totalPages: Math.ceil(totalItems / query.limit),
+    },
+  };
 }

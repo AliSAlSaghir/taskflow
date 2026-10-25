@@ -347,3 +347,291 @@ describe("POST /api/v1/projects/:projectId/tasks", () => {
     expect(taskCount).toBe(0);
   });
 });
+
+describe("GET /api/v1/projects/:projectId/tasks", () => {
+  it("allows the project owner to list tasks", async () => {
+    const owner = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "List Tasks Test Project",
+      },
+    });
+
+    await prisma.task.createMany({
+      data: [
+        { projectId: project.id, title: "First task" },
+        { projectId: project.id, title: "Second task" },
+      ],
+    });
+
+    const response = await request(app)
+      .get(`/api/v1/projects/${project.id}/tasks`)
+      .set("Cookie", owner.accessCookie);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toHaveLength(2);
+    expect(
+      response.body.data.map((task: { title: string }) => task.title),
+    ).toEqual(expect.arrayContaining(["First task", "Second task"]));
+    expect(response.body.pagination).toMatchObject({
+      page: 1,
+      limit: 10,
+      totalItems: 2,
+      totalPages: 1,
+    });
+  });
+
+  it("allows an active project member to list tasks", async () => {
+    const owner = await createLoggedInUser();
+    const member = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "Member Task Listing Test",
+      },
+    });
+
+    await prisma.projectMembership.create({
+      data: {
+        projectId: project.id,
+        userId: member.userId,
+      },
+    });
+
+    await prisma.task.create({
+      data: {
+        projectId: project.id,
+        title: "Assigned to another member",
+      },
+    });
+
+    const response = await request(app)
+      .get(`/api/v1/projects/${project.id}/tasks`)
+      .set("Cookie", member.accessCookie);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toHaveLength(1);
+    expect(response.body.data[0].title).toBe("Assigned to another member");
+  });
+
+  it("rejects a user who is not a project member", async () => {
+    const owner = await createLoggedInUser();
+    const otherUser = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "Non-Member Task Listing Test",
+      },
+    });
+
+    const response = await request(app)
+      .get(`/api/v1/projects/${project.id}/tasks`)
+      .set("Cookie", otherUser.accessCookie);
+
+    expect(response.status).toBe(404);
+    expect(response.body.error.code).toBe("NOT_FOUND");
+  });
+  it("excludes archived tasks by default", async () => {
+    const owner = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "Archived Task Listing Test",
+      },
+    });
+
+    await prisma.task.createMany({
+      data: [
+        { projectId: project.id, title: "Active task" },
+        {
+          projectId: project.id,
+          title: "Archived task",
+          archivedAt: new Date(),
+        },
+      ],
+    });
+
+    const response = await request(app)
+      .get(`/api/v1/projects/${project.id}/tasks`)
+      .set("Cookie", owner.accessCookie);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toHaveLength(1);
+    expect(response.body.data[0].title).toBe("Active task");
+    expect(response.body.pagination.totalItems).toBe(1);
+  });
+  it("filters tasks by status and priority", async () => {
+    const owner = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "Task Filtering Test",
+      },
+    });
+
+    await prisma.task.createMany({
+      data: [
+        {
+          projectId: project.id,
+          title: "High priority in progress",
+          status: "IN_PROGRESS",
+          priority: "HIGH",
+        },
+        {
+          projectId: project.id,
+          title: "Pending high priority",
+          status: "PENDING",
+          priority: "HIGH",
+        },
+        {
+          projectId: project.id,
+          title: "In progress medium priority",
+          status: "IN_PROGRESS",
+          priority: "MEDIUM",
+        },
+      ],
+    });
+
+    const response = await request(app)
+      .get(`/api/v1/projects/${project.id}/tasks`)
+      .query({ status: "IN_PROGRESS", priority: "HIGH" })
+      .set("Cookie", owner.accessCookie);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toHaveLength(1);
+    expect(response.body.data[0].title).toBe("High priority in progress");
+    expect(response.body.pagination.totalItems).toBe(1);
+  });
+  it("filters tasks by assignee", async () => {
+    const owner = await createLoggedInUser();
+    const member = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "Assignee Filtering Test",
+      },
+    });
+
+    await prisma.projectMembership.create({
+      data: { projectId: project.id, userId: member.userId },
+    });
+
+    await prisma.task.createMany({
+      data: [
+        {
+          projectId: project.id,
+          title: "Assigned task",
+          assigneeId: member.userId,
+        },
+        {
+          projectId: project.id,
+          title: "Unassigned task",
+        },
+      ],
+    });
+
+    const response = await request(app)
+      .get(`/api/v1/projects/${project.id}/tasks`)
+      .query({ assigneeId: member.userId })
+      .set("Cookie", owner.accessCookie);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toHaveLength(1);
+    expect(response.body.data[0].title).toBe("Assigned task");
+    expect(response.body.data[0].assigneeId).toBe(member.userId);
+  });
+  it("paginates the task list", async () => {
+    const owner = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "Task Pagination Test",
+      },
+    });
+
+    await prisma.task.createMany({
+      data: [
+        { projectId: project.id, title: "Task A" },
+        { projectId: project.id, title: "Task B" },
+        { projectId: project.id, title: "Task C" },
+      ],
+    });
+
+    const response = await request(app)
+      .get(`/api/v1/projects/${project.id}/tasks`)
+      .query({ page: 2, limit: 2 })
+      .set("Cookie", owner.accessCookie);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toHaveLength(1);
+    expect(response.body.pagination).toMatchObject({
+      page: 2,
+      limit: 2,
+      totalItems: 3,
+      totalPages: 2,
+    });
+  });
+  it("rejects invalid task filters", async () => {
+    const owner = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "Invalid Task Filter Test",
+      },
+    });
+
+    const response = await request(app)
+      .get(`/api/v1/projects/${project.id}/tasks`)
+      .query({ status: "INVALID" })
+      .set("Cookie", owner.accessCookie);
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("rejects invalid pagination parameters", async () => {
+    const owner = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "Invalid Task Pagination Test",
+      },
+    });
+
+    const response = await request(app)
+      .get(`/api/v1/projects/${project.id}/tasks`)
+      .query({ page: 0, limit: 101 })
+      .set("Cookie", owner.accessCookie);
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe("VALIDATION_ERROR");
+  });
+  it("does not list tasks in an archived project", async () => {
+    const owner = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "Archived Task Project Listing Test",
+        archivedAt: new Date(),
+      },
+    });
+
+    const response = await request(app)
+      .get(`/api/v1/projects/${project.id}/tasks`)
+      .set("Cookie", owner.accessCookie);
+
+    expect(response.status).toBe(404);
+    expect(response.body.error.code).toBe("NOT_FOUND");
+  });
+});

@@ -23,4 +23,13 @@ export const createTaskSchema = z
   })
   .strict();
 
+export const listTasksQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(10),
+  status: z.enum(["PENDING", "IN_PROGRESS", "COMPLETED"]).optional(),
+  priority: z.enum(["LOW", "MEDIUM", "HIGH"]).optional(),
+  assigneeId: z.string().uuid().optional(),
+});
+
 export type CreateTaskInput = z.infer<typeof createTaskSchema>;
+export type ListTasksQuery = z.infer<typeof listTasksQuerySchema>;
