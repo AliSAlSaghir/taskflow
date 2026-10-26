@@ -70,14 +70,35 @@ afterEach(async () => {
 
     if (!user) continue;
 
-    // Remove tasks before their projects and memberships.
+    await prisma.taskLabel.deleteMany({
+      where: {
+        task: {
+          project: {
+            ownerId: user.id,
+          },
+        },
+      },
+    });
+
     await prisma.task.deleteMany({
-      where: { project: { ownerId: user.id } },
+      where: {
+        project: {
+          ownerId: user.id,
+        },
+      },
     });
 
     await prisma.projectMembership.deleteMany({
       where: {
         OR: [{ project: { ownerId: user.id } }, { userId: user.id }],
+      },
+    });
+
+    await prisma.label.deleteMany({
+      where: {
+        project: {
+          ownerId: user.id,
+        },
       },
     });
 
@@ -188,6 +209,7 @@ describe("POST /api/v1/projects/:projectId/tasks", () => {
     });
 
     expect(task.projectId).toBe(project.id);
+    expect(response.body.data.labels).toEqual([]);
     expect(task.title).toBe("Prepare project documentation");
   });
 
@@ -436,6 +458,52 @@ describe("GET /api/v1/projects/:projectId/tasks", () => {
       totalItems: 2,
       totalPages: 1,
     });
+  });
+
+  it("includes assigned labels in task responses", async () => {
+    const owner = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "Task Labels Response Test",
+      },
+    });
+
+    const task = await prisma.task.create({
+      data: {
+        projectId: project.id,
+        title: "Task with a label",
+      },
+    });
+
+    const label = await prisma.label.create({
+      data: {
+        projectId: project.id,
+        name: "Bug",
+      },
+    });
+
+    await prisma.taskLabel.create({
+      data: {
+        projectId: project.id,
+        taskId: task.id,
+        labelId: label.id,
+      },
+    });
+
+    const response = await request(app)
+      .get(`/api/v1/projects/${project.id}/tasks`)
+      .set("Cookie", owner.accessCookie);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toHaveLength(1);
+    expect(response.body.data[0].labels).toEqual([
+      expect.objectContaining({
+        id: label.id,
+        name: "Bug",
+      }),
+    ]);
   });
 
   it("allows an active project member to list tasks", async () => {

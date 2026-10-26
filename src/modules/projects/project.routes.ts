@@ -15,11 +15,18 @@ import {
 } from "./membership.controller.js";
 import {
   archiveTaskController,
+  assignLabelToTaskController,
   createTaskController,
   listTasksController,
+  removeLabelFromTaskController,
   restoreTaskController,
   updateTaskController,
 } from "../tasks/task.controller.js";
+import {
+  createLabelController,
+  deleteLabelController,
+  listLabelsController,
+} from "../labels/label.controller.js";
 
 const projectRouter = Router();
 
@@ -68,6 +75,28 @@ projectRouter.post(
   "/:projectId/tasks/:taskId/restore",
   requireAuth,
   restoreTaskController,
+);
+
+projectRouter.post("/:projectId/labels", requireAuth, createLabelController);
+
+projectRouter.get("/:projectId/labels", requireAuth, listLabelsController);
+
+projectRouter.delete(
+  "/:projectId/labels/:labelId",
+  requireAuth,
+  deleteLabelController,
+);
+
+projectRouter.put(
+  "/:projectId/tasks/:taskId/labels/:labelId",
+  requireAuth,
+  assignLabelToTaskController,
+);
+
+projectRouter.delete(
+  "/:projectId/tasks/:taskId/labels/:labelId",
+  requireAuth,
+  removeLabelFromTaskController,
 );
 
 export { projectRouter };

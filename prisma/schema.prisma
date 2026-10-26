@@ -94,6 +94,7 @@ model Project {
   owner       User                @relation(fields: [ownerId], references: [id], onDelete: Restrict)
   memberships ProjectMembership[]
   tasks       Task[]
+  labels      Label[]
 
   @@index([ownerId, archivedAt, createdAt])
   @@map("projects")
@@ -144,7 +145,38 @@ model Task {
 
   assignee ProjectMembership? @relation(fields: [projectId, assigneeId], references: [projectId, userId], onDelete: Restrict)
 
+  labels TaskLabel[]
+
+  @@unique([projectId, id])
   @@index([projectId, archivedAt, createdAt])
   @@index([projectId, assigneeId, status])
   @@map("tasks")
+}
+
+model Label {
+  id        String   @id @default(uuid()) @db.Uuid
+  projectId String   @map("project_id") @db.Uuid
+  name      String   @db.VarChar(50)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  project Project     @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  tasks   TaskLabel[]
+
+  @@unique([projectId, id])
+  @@unique([projectId, name])
+  @@map("labels")
+}
+
+model TaskLabel {
+  projectId String @map("project_id") @db.Uuid
+  taskId    String @map("task_id") @db.Uuid
+  labelId   String @map("label_id") @db.Uuid
+
+  task  Task  @relation(fields: [projectId, taskId], references: [projectId, id], onDelete: Restrict)
+  label Label @relation(fields: [projectId, labelId], references: [projectId, id], onDelete: Cascade)
+
+  @@id([taskId, labelId])
+  @@index([projectId, labelId, taskId])
+  @@map("task_labels")
 }

@@ -6,12 +6,53 @@ import type {
   UpdateTaskStatusInput,
 } from "./task.schema.js";
 import {
+  LabelNotFoundError,
+  ProjectArchivedError,
   ProjectNotFoundError,
   TaskAssigneeNotEligibleError,
+  TaskLabelNotFoundError,
   TaskNotFoundError,
   TaskUpdateForbiddenError,
 } from "./task.errors.js";
 import { Prisma } from "../../generated/prisma/client.js";
+
+const taskResponseSelect = {
+  id: true,
+  projectId: true,
+  title: true,
+  description: true,
+  status: true,
+  priority: true,
+  assigneeId: true,
+  dueDate: true,
+  archivedAt: true,
+  createdAt: true,
+  updatedAt: true,
+  labels: {
+    select: {
+      label: {
+        select: {
+          id: true,
+          name: true,
+          createdAt: true,
+        },
+      },
+    },
+  },
+} satisfies Prisma.TaskSelect;
+
+type TaskWithLabels = Prisma.TaskGetPayload<{
+  select: typeof taskResponseSelect;
+}>;
+
+function toTaskResponse(task: TaskWithLabels) {
+  const { labels, ...taskFields } = task;
+
+  return {
+    ...taskFields,
+    labels: labels.map(({ label }) => label),
+  };
+}
 
 export async function createTask(
   ownerId: string,
@@ -52,7 +93,7 @@ export async function createTask(
     }
   }
 
-  return prisma.task.create({
+  const task = await prisma.task.create({
     data: {
       projectId: project.id,
       title: input.title,
@@ -63,20 +104,10 @@ export async function createTask(
         ? new Date(`${input.dueDate}T00:00:00.000Z`)
         : null,
     },
-    select: {
-      id: true,
-      projectId: true,
-      title: true,
-      description: true,
-      status: true,
-      priority: true,
-      assigneeId: true,
-      dueDate: true,
-      archivedAt: true,
-      createdAt: true,
-      updatedAt: true,
-    },
+    select: taskResponseSelect,
   });
+
+  return toTaskResponse(task);
 }
 
 export async function listTasks(
@@ -123,25 +154,13 @@ export async function listTasks(
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       skip: (query.page - 1) * query.limit,
       take: query.limit,
-      select: {
-        id: true,
-        projectId: true,
-        title: true,
-        description: true,
-        status: true,
-        priority: true,
-        assigneeId: true,
-        dueDate: true,
-        archivedAt: true,
-        createdAt: true,
-        updatedAt: true,
-      },
+      select: taskResponseSelect,
     }),
     prisma.task.count({ where }),
   ]);
 
   return {
-    data: tasks,
+    data: tasks.map(toTaskResponse),
     pagination: {
       page: query.page,
       limit: query.limit,
@@ -254,23 +273,13 @@ export async function updateTask(
       : null;
   }
 
-  return prisma.task.update({
+  const updatedTask = await prisma.task.update({
     where: { id: task.id },
     data,
-    select: {
-      id: true,
-      projectId: true,
-      title: true,
-      description: true,
-      status: true,
-      priority: true,
-      assigneeId: true,
-      dueDate: true,
-      archivedAt: true,
-      createdAt: true,
-      updatedAt: true,
-    },
+    select: taskResponseSelect,
   });
+
+  return toTaskResponse(updatedTask);
 }
 
 export async function archiveTask(
@@ -296,15 +305,15 @@ export async function archiveTask(
       id: taskId,
       projectId: project.id,
     },
+    select: taskResponseSelect,
   });
 
   if (!task) {
     throw new TaskNotFoundError();
   }
 
-  // Repeated archive requests are safe.
   if (task.archivedAt !== null) {
-    return task;
+    return toTaskResponse(task);
   }
 
   await prisma.task.updateMany({
@@ -316,22 +325,12 @@ export async function archiveTask(
     data: { archivedAt: new Date() },
   });
 
-  return prisma.task.findUniqueOrThrow({
+  const archivedTask = await prisma.task.findUniqueOrThrow({
     where: { id: task.id },
-    select: {
-      id: true,
-      projectId: true,
-      title: true,
-      description: true,
-      status: true,
-      priority: true,
-      assigneeId: true,
-      dueDate: true,
-      archivedAt: true,
-      createdAt: true,
-      updatedAt: true,
-    },
+    select: taskResponseSelect,
   });
+
+  return toTaskResponse(archivedTask);
 }
 
 export async function restoreTask(
@@ -357,15 +356,15 @@ export async function restoreTask(
       id: taskId,
       projectId: project.id,
     },
+    select: taskResponseSelect,
   });
 
   if (!task) {
     throw new TaskNotFoundError();
   }
 
-  // Repeated restore requests are safe.
   if (task.archivedAt === null) {
-    return task;
+    return toTaskResponse(task);
   }
 
   await prisma.task.updateMany({
@@ -377,20 +376,154 @@ export async function restoreTask(
     data: { archivedAt: null },
   });
 
-  return prisma.task.findUniqueOrThrow({
+  const restoredTask = await prisma.task.findUniqueOrThrow({
     where: { id: task.id },
+    select: taskResponseSelect,
+  });
+
+  return toTaskResponse(restoredTask);
+}
+
+export async function assignLabelToTask(
+  ownerId: string,
+  projectId: string,
+  taskId: string,
+  labelId: string,
+) {
+  const project = await prisma.project.findFirst({
+    where: {
+      id: projectId,
+      ownerId,
+    },
     select: {
       id: true,
-      projectId: true,
-      title: true,
-      description: true,
-      status: true,
-      priority: true,
-      assigneeId: true,
-      dueDate: true,
       archivedAt: true,
-      createdAt: true,
-      updatedAt: true,
+    },
+  });
+
+  if (!project) {
+    throw new ProjectNotFoundError();
+  }
+
+  if (project.archivedAt !== null) {
+    throw new ProjectArchivedError();
+  }
+
+  const task = await prisma.task.findFirst({
+    where: {
+      id: taskId,
+      projectId,
+      archivedAt: null,
+    },
+    select: { id: true },
+  });
+
+  if (!task) {
+    throw new TaskNotFoundError();
+  }
+
+  const label = await prisma.label.findFirst({
+    where: {
+      id: labelId,
+      projectId,
+    },
+    select: { id: true },
+  });
+
+  if (!label) {
+    throw new LabelNotFoundError();
+  }
+
+  // A repeated assignment should succeed without creating a duplicate.
+  return prisma.taskLabel.upsert({
+    where: {
+      taskId_labelId: {
+        taskId,
+        labelId,
+      },
+    },
+    update: {},
+    create: {
+      projectId,
+      taskId,
+      labelId,
+    },
+  });
+}
+
+export async function removeLabelFromTask(
+  ownerId: string,
+  projectId: string,
+  taskId: string,
+  labelId: string,
+) {
+  const project = await prisma.project.findFirst({
+    where: {
+      id: projectId,
+      ownerId,
+    },
+    select: {
+      id: true,
+      archivedAt: true,
+    },
+  });
+
+  if (!project) {
+    throw new ProjectNotFoundError();
+  }
+
+  if (project.archivedAt !== null) {
+    throw new ProjectArchivedError();
+  }
+
+  const task = await prisma.task.findFirst({
+    where: {
+      id: taskId,
+      projectId,
+      archivedAt: null,
+    },
+    select: { id: true },
+  });
+
+  if (!task) {
+    throw new TaskNotFoundError();
+  }
+
+  const label = await prisma.label.findFirst({
+    where: {
+      id: labelId,
+      projectId,
+    },
+    select: { id: true },
+  });
+
+  if (!label) {
+    throw new LabelNotFoundError();
+  }
+
+  const association = await prisma.taskLabel.findUnique({
+    where: {
+      taskId_labelId: {
+        taskId,
+        labelId,
+      },
+    },
+    select: {
+      taskId: true,
+      labelId: true,
+    },
+  });
+
+  if (!association) {
+    throw new TaskLabelNotFoundError();
+  }
+
+  return prisma.taskLabel.delete({
+    where: {
+      taskId_labelId: {
+        taskId,
+        labelId,
+      },
     },
   });
 }

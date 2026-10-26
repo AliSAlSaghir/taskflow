@@ -6,15 +6,21 @@ import {
   updateTaskSchema,
 } from "./task.schema.js";
 import {
+  LabelNotFoundError,
+  ProjectArchivedError,
   ProjectNotFoundError,
   TaskAssigneeNotEligibleError,
+  TaskLabelNotFoundError,
   TaskNotFoundError,
   TaskUpdateForbiddenError,
 } from "./task.errors.js";
+
 import {
   archiveTask,
+  assignLabelToTask,
   createTask,
   listTasks,
+  removeLabelFromTask,
   restoreTask,
   updateTask,
 } from "./task.service.js";
@@ -320,6 +326,170 @@ export const restoreTaskController: RequestHandler = async (req, res, next) => {
         error: {
           code: "NOT_FOUND",
           message: "The requested resource was not found.",
+        },
+      });
+      return;
+    }
+
+    next(error);
+  }
+};
+
+export const assignLabelToTaskController: RequestHandler = async (
+  req,
+  res,
+  next,
+) => {
+  const projectIdResult = projectIdSchema.safeParse(req.params.projectId);
+  const taskIdResult = projectIdSchema.safeParse(req.params.taskId);
+  const labelIdResult = projectIdSchema.safeParse(req.params.labelId);
+
+  if (
+    !projectIdResult.success ||
+    !taskIdResult.success ||
+    !labelIdResult.success
+  ) {
+    res.status(400).json({
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "Invalid project, task, or label ID.",
+      },
+    });
+    return;
+  }
+
+  try {
+    await assignLabelToTask(
+      res.locals.user.id,
+      projectIdResult.data,
+      taskIdResult.data,
+      labelIdResult.data,
+    );
+
+    res.status(204).send();
+  } catch (error) {
+    if (error instanceof ProjectNotFoundError) {
+      res.status(404).json({
+        error: {
+          code: "NOT_FOUND",
+          message: error.message,
+        },
+      });
+      return;
+    }
+
+    if (error instanceof TaskNotFoundError) {
+      res.status(404).json({
+        error: {
+          code: "NOT_FOUND",
+          message: error.message,
+        },
+      });
+      return;
+    }
+
+    if (error instanceof LabelNotFoundError) {
+      res.status(404).json({
+        error: {
+          code: "NOT_FOUND",
+          message: error.message,
+        },
+      });
+      return;
+    }
+
+    if (error instanceof ProjectArchivedError) {
+      res.status(409).json({
+        error: {
+          code: "PROJECT_ARCHIVED",
+          message: error.message,
+        },
+      });
+      return;
+    }
+
+    next(error);
+  }
+};
+
+export const removeLabelFromTaskController: RequestHandler = async (
+  req,
+  res,
+  next,
+) => {
+  const projectIdResult = projectIdSchema.safeParse(req.params.projectId);
+  const taskIdResult = projectIdSchema.safeParse(req.params.taskId);
+  const labelIdResult = projectIdSchema.safeParse(req.params.labelId);
+
+  if (
+    !projectIdResult.success ||
+    !taskIdResult.success ||
+    !labelIdResult.success
+  ) {
+    res.status(400).json({
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "Invalid project, task, or label ID.",
+      },
+    });
+    return;
+  }
+
+  try {
+    await removeLabelFromTask(
+      res.locals.user.id,
+      projectIdResult.data,
+      taskIdResult.data,
+      labelIdResult.data,
+    );
+
+    res.status(204).send();
+  } catch (error) {
+    if (error instanceof ProjectNotFoundError) {
+      res.status(404).json({
+        error: {
+          code: "NOT_FOUND",
+          message: error.message,
+        },
+      });
+      return;
+    }
+
+    if (error instanceof TaskNotFoundError) {
+      res.status(404).json({
+        error: {
+          code: "NOT_FOUND",
+          message: error.message,
+        },
+      });
+      return;
+    }
+
+    if (error instanceof LabelNotFoundError) {
+      res.status(404).json({
+        error: {
+          code: "NOT_FOUND",
+          message: error.message,
+        },
+      });
+      return;
+    }
+
+    if (error instanceof TaskLabelNotFoundError) {
+      res.status(404).json({
+        error: {
+          code: "NOT_FOUND",
+          message: error.message,
+        },
+      });
+      return;
+    }
+
+    if (error instanceof ProjectArchivedError) {
+      res.status(409).json({
+        error: {
+          code: "PROJECT_ARCHIVED",
+          message: error.message,
         },
       });
       return;
