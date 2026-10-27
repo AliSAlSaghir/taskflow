@@ -141,10 +141,27 @@ export async function listTasks(
   const where = {
     projectId: project.id,
     archivedAt: null,
-    ...(query.status !== undefined && { status: query.status }),
-    ...(query.priority !== undefined && { priority: query.priority }),
+    ...(query.status !== undefined && {
+      status: query.status,
+    }),
+    ...(query.priority !== undefined && {
+      priority: query.priority,
+    }),
     ...(query.assigneeId !== undefined && {
       assigneeId: query.assigneeId,
+    }),
+    ...(query.search !== undefined && {
+      title: {
+        contains: query.search,
+        mode: "insensitive" as const,
+      },
+    }),
+    ...(query.labelId !== undefined && {
+      labels: {
+        some: {
+          labelId: query.labelId,
+        },
+      },
     }),
   };
 

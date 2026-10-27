@@ -17,7 +17,7 @@ export const createTaskSchema = z
 
     priority: z.enum(["LOW", "MEDIUM", "HIGH"]).default("MEDIUM"),
 
-    assigneeId: z.string().uuid().nullable().optional(),
+    assigneeId: z.uuid().nullable().optional(),
 
     dueDate: z.iso.date().nullable().optional(),
   })
@@ -28,7 +28,9 @@ export const listTasksQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(10),
   status: z.enum(["PENDING", "IN_PROGRESS", "COMPLETED"]).optional(),
   priority: z.enum(["LOW", "MEDIUM", "HIGH"]).optional(),
-  assigneeId: z.string().uuid().optional(),
+  assigneeId: z.uuid().optional(),
+  search: z.string().trim().min(1).max(200).optional(),
+  labelId: z.uuid().optional(),
 });
 
 export const updateTaskSchema = z
@@ -47,7 +49,7 @@ export const updateTaskSchema = z
       .optional(),
     status: z.enum(["PENDING", "IN_PROGRESS", "COMPLETED"]).optional(),
     priority: z.enum(["LOW", "MEDIUM", "HIGH"]).optional(),
-    assigneeId: z.string().uuid().nullable().optional(),
+    assigneeId: z.uuid().nullable().optional(),
     dueDate: z.iso.date().nullable().optional(),
   })
   .strict()

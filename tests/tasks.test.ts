@@ -757,6 +757,174 @@ describe("GET /api/v1/projects/:projectId/tasks", () => {
     expect(response.status).toBe(404);
     expect(response.body.error.code).toBe("NOT_FOUND");
   });
+
+  it("searches task titles case-insensitively", async () => {
+    const owner = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "Task Search Test",
+      },
+    });
+
+    await prisma.task.createMany({
+      data: [
+        { projectId: project.id, title: "Implement Login" },
+        { projectId: project.id, title: "Fix LOGIN validation" },
+        { projectId: project.id, title: "Update documentation" },
+      ],
+    });
+
+    const response = await request(app)
+      .get(`/api/v1/projects/${project.id}/tasks`)
+      .query({ search: "login" })
+      .set("Cookie", owner.accessCookie);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toHaveLength(2);
+    expect(
+      response.body.data.map((task: { title: string }) => task.title),
+    ).toEqual(
+      expect.arrayContaining(["Implement Login", "Fix LOGIN validation"]),
+    );
+    expect(response.body.pagination.totalItems).toBe(2);
+  });
+
+  it("combines title search with existing filters", async () => {
+    const owner = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "Combined Task Search Test",
+      },
+    });
+
+    await prisma.task.createMany({
+      data: [
+        {
+          projectId: project.id,
+          title: "Implement login",
+          status: "IN_PROGRESS",
+          priority: "HIGH",
+        },
+        {
+          projectId: project.id,
+          title: "Fix login",
+          status: "PENDING",
+          priority: "HIGH",
+        },
+        {
+          projectId: project.id,
+          title: "Implement dashboard",
+          status: "IN_PROGRESS",
+          priority: "HIGH",
+        },
+      ],
+    });
+
+    const response = await request(app)
+      .get(`/api/v1/projects/${project.id}/tasks`)
+      .query({
+        search: "login",
+        status: "IN_PROGRESS",
+        priority: "HIGH",
+      })
+      .set("Cookie", owner.accessCookie);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toHaveLength(1);
+    expect(response.body.data[0].title).toBe("Implement login");
+    expect(response.body.pagination.totalItems).toBe(1);
+  });
+
+  it("rejects an empty task search", async () => {
+    const owner = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "Empty Task Search Test",
+      },
+    });
+
+    const response = await request(app)
+      .get(`/api/v1/projects/${project.id}/tasks`)
+      .query({ search: "   " })
+      .set("Cookie", owner.accessCookie);
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe("VALIDATION_ERROR");
+  });
+  it("filters tasks by label", async () => {
+    const owner = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "Label Filter Test",
+      },
+    });
+
+    const label = await prisma.label.create({
+      data: {
+        projectId: project.id,
+        name: "Backend",
+      },
+    });
+
+    const matchingTask = await prisma.task.create({
+      data: {
+        projectId: project.id,
+        title: "Implement authentication",
+      },
+    });
+
+    await prisma.taskLabel.create({
+      data: {
+        projectId: project.id,
+        taskId: matchingTask.id,
+        labelId: label.id,
+      },
+    });
+
+    await prisma.task.create({
+      data: {
+        projectId: project.id,
+        title: "Update documentation",
+      },
+    });
+
+    const response = await request(app)
+      .get(`/api/v1/projects/${project.id}/tasks`)
+      .query({ labelId: label.id })
+      .set("Cookie", owner.accessCookie);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toHaveLength(1);
+    expect(response.body.data[0].id).toBe(matchingTask.id);
+    expect(response.body.pagination.totalItems).toBe(1);
+  });
+
+  it("rejects an invalid label ID filter", async () => {
+    const owner = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "Invalid Label Filter Test",
+      },
+    });
+
+    const response = await request(app)
+      .get(`/api/v1/projects/${project.id}/tasks`)
+      .query({ labelId: "not-a-uuid" })
+      .set("Cookie", owner.accessCookie);
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe("VALIDATION_ERROR");
+  });
 });
 
 describe("PATCH /api/v1/projects/:projectId/tasks/:taskId", () => {
