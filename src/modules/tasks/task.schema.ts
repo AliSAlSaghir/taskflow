@@ -31,6 +31,10 @@ export const listTasksQuerySchema = z.object({
   assigneeId: z.uuid().optional(),
   search: z.string().trim().min(1).max(200).optional(),
   labelId: z.uuid().optional(),
+  sortBy: z
+    .enum(["createdAt", "dueDate", "priority", "title"])
+    .default("createdAt"),
+  sortOrder: z.enum(["asc", "desc"]).default("desc"),
 });
 
 export const updateTaskSchema = z

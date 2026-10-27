@@ -925,6 +925,271 @@ describe("GET /api/v1/projects/:projectId/tasks", () => {
     expect(response.status).toBe(400);
     expect(response.body.error.code).toBe("VALIDATION_ERROR");
   });
+  it("sorts tasks by priority in descending order", async () => {
+    const owner = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "Priority Sorting Test",
+      },
+    });
+
+    await prisma.task.createMany({
+      data: [
+        {
+          projectId: project.id,
+          title: "Low priority task",
+          priority: "LOW",
+        },
+        {
+          projectId: project.id,
+          title: "High priority task",
+          priority: "HIGH",
+        },
+        {
+          projectId: project.id,
+          title: "Medium priority task",
+          priority: "MEDIUM",
+        },
+      ],
+    });
+
+    const response = await request(app)
+      .get(`/api/v1/projects/${project.id}/tasks`)
+      .query({ sortBy: "priority", sortOrder: "desc" })
+      .set("Cookie", owner.accessCookie);
+
+    expect(response.status).toBe(200);
+    expect(
+      response.body.data.map((task: { priority: string }) => task.priority),
+    ).toEqual(["HIGH", "MEDIUM", "LOW"]);
+  });
+
+  it("sorts tasks by priority in ascending order", async () => {
+    const owner = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "Priority Sorting Ascending Test",
+      },
+    });
+
+    await prisma.task.createMany({
+      data: [
+        {
+          projectId: project.id,
+          title: "High priority task",
+          priority: "HIGH",
+        },
+        {
+          projectId: project.id,
+          title: "Low priority task",
+          priority: "LOW",
+        },
+        {
+          projectId: project.id,
+          title: "Medium priority task",
+          priority: "MEDIUM",
+        },
+      ],
+    });
+
+    const response = await request(app)
+      .get(`/api/v1/projects/${project.id}/tasks`)
+      .query({ sortBy: "priority", sortOrder: "asc" })
+      .set("Cookie", owner.accessCookie);
+
+    expect(response.status).toBe(200);
+    expect(
+      response.body.data.map((task: { priority: string }) => task.priority),
+    ).toEqual(["LOW", "MEDIUM", "HIGH"]);
+  });
+
+  it("sorts tasks by due date with missing dates last", async () => {
+    const owner = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "Due Date Sorting Test",
+      },
+    });
+
+    await prisma.task.createMany({
+      data: [
+        {
+          projectId: project.id,
+          title: "No due date",
+          dueDate: null,
+        },
+        {
+          projectId: project.id,
+          title: "Later task",
+          dueDate: new Date("2026-12-20T00:00:00.000Z"),
+        },
+        {
+          projectId: project.id,
+          title: "Earlier task",
+          dueDate: new Date("2026-11-10T00:00:00.000Z"),
+        },
+      ],
+    });
+
+    const response = await request(app)
+      .get(`/api/v1/projects/${project.id}/tasks`)
+      .query({ sortBy: "dueDate", sortOrder: "asc" })
+      .set("Cookie", owner.accessCookie);
+
+    expect(response.status).toBe(200);
+    expect(
+      response.body.data.map((task: { title: string }) => task.title),
+    ).toEqual(["Earlier task", "Later task", "No due date"]);
+  });
+
+  it("keeps tasks without due dates last when sorting descending", async () => {
+    const owner = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "Due Date Descending Test",
+      },
+    });
+
+    await prisma.task.createMany({
+      data: [
+        {
+          projectId: project.id,
+          title: "No due date",
+          dueDate: null,
+        },
+        {
+          projectId: project.id,
+          title: "Earlier task",
+          dueDate: new Date("2026-11-10T00:00:00.000Z"),
+        },
+        {
+          projectId: project.id,
+          title: "Later task",
+          dueDate: new Date("2026-12-20T00:00:00.000Z"),
+        },
+      ],
+    });
+
+    const response = await request(app)
+      .get(`/api/v1/projects/${project.id}/tasks`)
+      .query({ sortBy: "dueDate", sortOrder: "desc" })
+      .set("Cookie", owner.accessCookie);
+
+    expect(response.status).toBe(200);
+    expect(
+      response.body.data.map((task: { title: string }) => task.title),
+    ).toEqual(["Later task", "Earlier task", "No due date"]);
+  });
+
+  it("sorts tasks by title in ascending order", async () => {
+    const owner = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "Title Sorting Test",
+      },
+    });
+
+    await prisma.task.createMany({
+      data: [
+        { projectId: project.id, title: "Charlie task" },
+        { projectId: project.id, title: "Alpha task" },
+        { projectId: project.id, title: "Bravo task" },
+      ],
+    });
+
+    const response = await request(app)
+      .get(`/api/v1/projects/${project.id}/tasks`)
+      .query({ sortBy: "title", sortOrder: "asc" })
+      .set("Cookie", owner.accessCookie);
+
+    expect(response.status).toBe(200);
+    expect(
+      response.body.data.map((task: { title: string }) => task.title),
+    ).toEqual(["Alpha task", "Bravo task", "Charlie task"]);
+  });
+
+  it("sorts by newest creation date by default", async () => {
+    const owner = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "Default Sorting Test",
+      },
+    });
+
+    const olderTask = await prisma.task.create({
+      data: {
+        projectId: project.id,
+        title: "Older task",
+        createdAt: new Date("2026-01-01T00:00:00.000Z"),
+      },
+    });
+
+    const newerTask = await prisma.task.create({
+      data: {
+        projectId: project.id,
+        title: "Newer task",
+        createdAt: new Date("2026-01-02T00:00:00.000Z"),
+      },
+    });
+
+    const response = await request(app)
+      .get(`/api/v1/projects/${project.id}/tasks`)
+      .set("Cookie", owner.accessCookie);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.map((task: { id: string }) => task.id)).toEqual([
+      newerTask.id,
+      olderTask.id,
+    ]);
+  });
+
+  it("rejects an invalid sortBy value", async () => {
+    const owner = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "Invalid Sort Field Test",
+      },
+    });
+
+    const response = await request(app)
+      .get(`/api/v1/projects/${project.id}/tasks`)
+      .query({ sortBy: "invalidField" })
+      .set("Cookie", owner.accessCookie);
+
+    expect(response.status).toBe(400);
+  });
+
+  it("rejects an invalid sortOrder value", async () => {
+    const owner = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "Invalid Sort Order Test",
+      },
+    });
+
+    const response = await request(app)
+      .get(`/api/v1/projects/${project.id}/tasks`)
+      .query({ sortOrder: "sideways" })
+      .set("Cookie", owner.accessCookie);
+
+    expect(response.status).toBe(400);
+  });
 });
 
 describe("PATCH /api/v1/projects/:projectId/tasks/:taskId", () => {

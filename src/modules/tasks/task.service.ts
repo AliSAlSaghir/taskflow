@@ -165,10 +165,23 @@ export async function listTasks(
     }),
   };
 
+  const orderBy =
+    query.sortBy === "dueDate"
+      ? [
+          {
+            dueDate: {
+              sort: query.sortOrder,
+              nulls: "last" as const,
+            },
+          },
+          { id: query.sortOrder },
+        ]
+      : [{ [query.sortBy]: query.sortOrder }, { id: query.sortOrder }];
+
   const [tasks, totalItems] = await prisma.$transaction([
     prisma.task.findMany({
       where,
-      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      orderBy,
       skip: (query.page - 1) * query.limit,
       take: query.limit,
       select: taskResponseSelect,
