@@ -17,6 +17,7 @@ import {
   archiveTaskController,
   assignLabelToTaskController,
   createTaskController,
+  getTaskController,
   listTasksController,
   removeLabelFromTaskController,
   restoreTaskController,
@@ -59,6 +60,7 @@ projectRouter.delete(
 
 projectRouter.post("/:projectId/tasks", requireAuth, createTaskController);
 projectRouter.get("/:projectId/tasks", requireAuth, listTasksController);
+projectRouter.get("/:projectId/tasks/:taskId", requireAuth, getTaskController);
 projectRouter.patch(
   "/:projectId/tasks/:taskId",
   requireAuth,

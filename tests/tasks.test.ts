@@ -1192,6 +1192,224 @@ describe("GET /api/v1/projects/:projectId/tasks", () => {
   });
 });
 
+describe("GET /api/v1/projects/:projectId/tasks/:taskId", () => {
+  it("allows the project owner to retrieve a task with its labels", async () => {
+    const owner = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "Get Task Test Project",
+      },
+    });
+
+    const task = await prisma.task.create({
+      data: {
+        projectId: project.id,
+        title: "Task details",
+        description: "Details to retrieve",
+      },
+    });
+
+    const label = await prisma.label.create({
+      data: {
+        projectId: project.id,
+        name: "Bug",
+      },
+    });
+
+    await prisma.taskLabel.create({
+      data: {
+        projectId: project.id,
+        taskId: task.id,
+        labelId: label.id,
+      },
+    });
+
+    const response = await request(app)
+      .get(`/api/v1/projects/${project.id}/tasks/${task.id}`)
+      .set("Cookie", owner.accessCookie);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toMatchObject({
+      id: task.id,
+      projectId: project.id,
+      title: "Task details",
+      description: "Details to retrieve",
+      labels: [
+        expect.objectContaining({
+          id: label.id,
+          name: "Bug",
+        }),
+      ],
+    });
+  });
+
+  it("allows an active project member to retrieve a task", async () => {
+    const owner = await createLoggedInUser();
+    const member = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "Member Get Task Test",
+      },
+    });
+
+    await prisma.projectMembership.create({
+      data: {
+        projectId: project.id,
+        userId: member.userId,
+      },
+    });
+
+    const task = await prisma.task.create({
+      data: {
+        projectId: project.id,
+        title: "Member-visible task",
+      },
+    });
+
+    const response = await request(app)
+      .get(`/api/v1/projects/${project.id}/tasks/${task.id}`)
+      .set("Cookie", member.accessCookie);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.id).toBe(task.id);
+    expect(response.body.data.title).toBe("Member-visible task");
+  });
+
+  it("returns 404 when the requester is not a project member", async () => {
+    const owner = await createLoggedInUser();
+    const otherUser = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "Unauthorized Get Task Test",
+      },
+    });
+
+    const task = await prisma.task.create({
+      data: {
+        projectId: project.id,
+        title: "Private task",
+      },
+    });
+
+    const response = await request(app)
+      .get(`/api/v1/projects/${project.id}/tasks/${task.id}`)
+      .set("Cookie", otherUser.accessCookie);
+
+    expect(response.status).toBe(404);
+    expect(response.body.error.code).toBe("NOT_FOUND");
+  });
+
+  it("returns 404 when the task belongs to another project", async () => {
+    const owner = await createLoggedInUser();
+
+    const firstProject = await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "First Get Task Project",
+      },
+    });
+
+    const secondProject = await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "Second Get Task Project",
+      },
+    });
+
+    const task = await prisma.task.create({
+      data: {
+        projectId: firstProject.id,
+        title: "Task in first project",
+      },
+    });
+
+    const response = await request(app)
+      .get(`/api/v1/projects/${secondProject.id}/tasks/${task.id}`)
+      .set("Cookie", owner.accessCookie);
+
+    expect(response.status).toBe(404);
+    expect(response.body.error.code).toBe("NOT_FOUND");
+  });
+
+  it("returns 404 when the task is archived", async () => {
+    const owner = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "Archived Get Task Test",
+      },
+    });
+
+    const task = await prisma.task.create({
+      data: {
+        projectId: project.id,
+        title: "Archived task",
+        archivedAt: new Date(),
+      },
+    });
+
+    const response = await request(app)
+      .get(`/api/v1/projects/${project.id}/tasks/${task.id}`)
+      .set("Cookie", owner.accessCookie);
+
+    expect(response.status).toBe(404);
+    expect(response.body.error.code).toBe("NOT_FOUND");
+  });
+
+  it("returns 404 when the project is archived", async () => {
+    const owner = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "Archived Project Get Task Test",
+        archivedAt: new Date(),
+      },
+    });
+
+    const task = await prisma.task.create({
+      data: {
+        projectId: project.id,
+        title: "Task in archived project",
+      },
+    });
+
+    const response = await request(app)
+      .get(`/api/v1/projects/${project.id}/tasks/${task.id}`)
+      .set("Cookie", owner.accessCookie);
+
+    expect(response.status).toBe(404);
+    expect(response.body.error.code).toBe("NOT_FOUND");
+  });
+
+  it("returns 400 when either ID is invalid", async () => {
+    const owner = await createLoggedInUser();
+
+    const validProjectId = randomUUID();
+    const validTaskId = randomUUID();
+
+    const invalidProject = await request(app)
+      .get(`/api/v1/projects/not-a-uuid/tasks/${validTaskId}`)
+      .set("Cookie", owner.accessCookie);
+
+    const invalidTask = await request(app)
+      .get(`/api/v1/projects/${validProjectId}/tasks/not-a-uuid`)
+      .set("Cookie", owner.accessCookie);
+
+    expect(invalidProject.status).toBe(400);
+    expect(invalidProject.body.error.code).toBe("VALIDATION_ERROR");
+    expect(invalidTask.status).toBe(400);
+    expect(invalidTask.body.error.code).toBe("VALIDATION_ERROR");
+  });
+});
+
 describe("PATCH /api/v1/projects/:projectId/tasks/:taskId", () => {
   it("allows the project owner to update task details", async () => {
     const owner = await createLoggedInUser();

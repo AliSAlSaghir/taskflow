@@ -200,6 +200,50 @@ export async function listTasks(
   };
 }
 
+export async function getTask(
+  userId: string,
+  projectId: string,
+  taskId: string,
+) {
+  const project = await prisma.project.findFirst({
+    where: {
+      id: projectId,
+      archivedAt: null,
+      OR: [
+        { ownerId: userId },
+        {
+          memberships: {
+            some: {
+              userId,
+              user: { status: "ACTIVE" },
+            },
+          },
+        },
+      ],
+    },
+    select: { id: true },
+  });
+
+  if (!project) {
+    throw new ProjectNotFoundError();
+  }
+
+  const task = await prisma.task.findFirst({
+    where: {
+      id: taskId,
+      projectId: project.id,
+      archivedAt: null,
+    },
+    select: taskResponseSelect,
+  });
+
+  if (!task) {
+    throw new TaskNotFoundError();
+  }
+
+  return toTaskResponse(task);
+}
+
 export async function updateTask(
   userId: string,
   projectId: string,
