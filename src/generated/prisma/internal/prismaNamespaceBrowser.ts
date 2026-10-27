@@ -63,6 +63,7 @@ export const ModelName = {
   Task: "Task",
   Label: "Label",
   TaskLabel: "TaskLabel",
+  TaskComment: "TaskComment",
 } as const;
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName];
@@ -191,6 +192,19 @@ export const TaskLabelScalarFieldEnum = {
 
 export type TaskLabelScalarFieldEnum =
   (typeof TaskLabelScalarFieldEnum)[keyof typeof TaskLabelScalarFieldEnum];
+
+export const TaskCommentScalarFieldEnum = {
+  id: "id",
+  taskId: "taskId",
+  authorId: "authorId",
+  body: "body",
+  createdAt: "createdAt",
+  updatedAt: "updatedAt",
+  deletedAt: "deletedAt",
+} as const;
+
+export type TaskCommentScalarFieldEnum =
+  (typeof TaskCommentScalarFieldEnum)[keyof typeof TaskCommentScalarFieldEnum];
 
 export const SortOrder = {
   asc: "asc",

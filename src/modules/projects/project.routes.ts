@@ -28,6 +28,12 @@ import {
   deleteLabelController,
   listLabelsController,
 } from "../labels/label.controller.js";
+import {
+  createCommentController,
+  deleteCommentController,
+  listCommentsController,
+  updateCommentController,
+} from "../comments/comment.controller.js";
 
 const projectRouter = Router();
 
@@ -99,6 +105,30 @@ projectRouter.delete(
   "/:projectId/tasks/:taskId/labels/:labelId",
   requireAuth,
   removeLabelFromTaskController,
+);
+
+projectRouter.post(
+  "/:projectId/tasks/:taskId/comments",
+  requireAuth,
+  createCommentController,
+);
+
+projectRouter.get(
+  "/:projectId/tasks/:taskId/comments",
+  requireAuth,
+  listCommentsController,
+);
+
+projectRouter.patch(
+  "/:projectId/tasks/:taskId/comments/:commentId",
+  requireAuth,
+  updateCommentController,
+);
+
+projectRouter.delete(
+  "/:projectId/tasks/:taskId/comments/:commentId",
+  requireAuth,
+  deleteCommentController,
 );
 
 export { projectRouter };

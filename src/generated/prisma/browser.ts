@@ -61,3 +61,8 @@ export type Label = Prisma.LabelModel;
  *
  */
 export type TaskLabel = Prisma.TaskLabelModel;
+/**
+ * Model TaskComment
+ *
+ */
+export type TaskComment = Prisma.TaskCommentModel;

@@ -22,6 +22,7 @@ model User {
   authSessions       AuthSession[]
   ownedProjects      Project[]
   projectMemberships ProjectMembership[]
+  authoredComments TaskComment[]
 
   @@map("users")
 }
@@ -146,6 +147,7 @@ model Task {
   assignee ProjectMembership? @relation(fields: [projectId, assigneeId], references: [projectId, userId], onDelete: Restrict)
 
   labels TaskLabel[]
+  comments TaskComment[]
 
   @@unique([projectId, id])
   @@index([projectId, archivedAt, createdAt])
@@ -179,4 +181,20 @@ model TaskLabel {
   @@id([taskId, labelId])
   @@index([projectId, labelId, taskId])
   @@map("task_labels")
+}
+
+model TaskComment {
+  id        String    @id @default(uuid()) @db.Uuid
+  taskId    String    @map("task_id") @db.Uuid
+  authorId  String    @map("author_id") @db.Uuid
+  body      String    @db.Text
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  task   Task @relation(fields: [taskId], references: [id], onDelete: Restrict)
+  author User @relation(fields: [authorId], references: [id], onDelete: Restrict)
+
+  @@index([taskId, createdAt, id])
+  @@map("task_comments")
 }

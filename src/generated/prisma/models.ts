@@ -16,4 +16,5 @@ export type * from "./models/ProjectMembership.ts";
 export type * from "./models/Task.ts";
 export type * from "./models/Label.ts";
 export type * from "./models/TaskLabel.ts";
+export type * from "./models/TaskComment.ts";
 export type * from "./commonInputTypes.ts";

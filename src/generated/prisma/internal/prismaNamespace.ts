@@ -437,6 +437,7 @@ export const ModelName = {
   Task: "Task",
   Label: "Label",
   TaskLabel: "TaskLabel",
+  TaskComment: "TaskComment",
 } as const;
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName];
@@ -467,7 +468,8 @@ export type TypeMap<
       | "projectMembership"
       | "task"
       | "label"
-      | "taskLabel";
+      | "taskLabel"
+      | "taskComment";
     txIsolationLevel: TransactionIsolationLevel;
   };
   model: {
@@ -1155,6 +1157,82 @@ export type TypeMap<
         };
       };
     };
+    TaskComment: {
+      payload: Prisma.$TaskCommentPayload<ExtArgs>;
+      fields: Prisma.TaskCommentFieldRefs;
+      operations: {
+        findUnique: {
+          args: Prisma.TaskCommentFindUniqueArgs<ExtArgs>;
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$TaskCommentPayload> | null;
+        };
+        findUniqueOrThrow: {
+          args: Prisma.TaskCommentFindUniqueOrThrowArgs<ExtArgs>;
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$TaskCommentPayload>;
+        };
+        findFirst: {
+          args: Prisma.TaskCommentFindFirstArgs<ExtArgs>;
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$TaskCommentPayload> | null;
+        };
+        findFirstOrThrow: {
+          args: Prisma.TaskCommentFindFirstOrThrowArgs<ExtArgs>;
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$TaskCommentPayload>;
+        };
+        findMany: {
+          args: Prisma.TaskCommentFindManyArgs<ExtArgs>;
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$TaskCommentPayload>[];
+        };
+        create: {
+          args: Prisma.TaskCommentCreateArgs<ExtArgs>;
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$TaskCommentPayload>;
+        };
+        createMany: {
+          args: Prisma.TaskCommentCreateManyArgs<ExtArgs>;
+          result: BatchPayload;
+        };
+        createManyAndReturn: {
+          args: Prisma.TaskCommentCreateManyAndReturnArgs<ExtArgs>;
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$TaskCommentPayload>[];
+        };
+        delete: {
+          args: Prisma.TaskCommentDeleteArgs<ExtArgs>;
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$TaskCommentPayload>;
+        };
+        update: {
+          args: Prisma.TaskCommentUpdateArgs<ExtArgs>;
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$TaskCommentPayload>;
+        };
+        deleteMany: {
+          args: Prisma.TaskCommentDeleteManyArgs<ExtArgs>;
+          result: BatchPayload;
+        };
+        updateMany: {
+          args: Prisma.TaskCommentUpdateManyArgs<ExtArgs>;
+          result: BatchPayload;
+        };
+        updateManyAndReturn: {
+          args: Prisma.TaskCommentUpdateManyAndReturnArgs<ExtArgs>;
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$TaskCommentPayload>[];
+        };
+        upsert: {
+          args: Prisma.TaskCommentUpsertArgs<ExtArgs>;
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$TaskCommentPayload>;
+        };
+        aggregate: {
+          args: Prisma.TaskCommentAggregateArgs<ExtArgs>;
+          result: runtime.Types.Utils.Optional<Prisma.AggregateTaskComment>;
+        };
+        groupBy: {
+          args: Prisma.TaskCommentGroupByArgs<ExtArgs>;
+          result: runtime.Types.Utils.Optional<Prisma.TaskCommentGroupByOutputType>[];
+        };
+        count: {
+          args: Prisma.TaskCommentCountArgs<ExtArgs>;
+          result:
+            | runtime.Types.Utils.Optional<Prisma.TaskCommentCountAggregateOutputType>
+            | number;
+        };
+      };
+    };
   };
 } & {
   other: {
@@ -1304,6 +1382,19 @@ export const TaskLabelScalarFieldEnum = {
 
 export type TaskLabelScalarFieldEnum =
   (typeof TaskLabelScalarFieldEnum)[keyof typeof TaskLabelScalarFieldEnum];
+
+export const TaskCommentScalarFieldEnum = {
+  id: "id",
+  taskId: "taskId",
+  authorId: "authorId",
+  body: "body",
+  createdAt: "createdAt",
+  updatedAt: "updatedAt",
+  deletedAt: "deletedAt",
+} as const;
+
+export type TaskCommentScalarFieldEnum =
+  (typeof TaskCommentScalarFieldEnum)[keyof typeof TaskCommentScalarFieldEnum];
 
 export const SortOrder = {
   asc: "asc",
@@ -1609,6 +1700,7 @@ export type GlobalOmitConfig = {
   task?: Prisma.TaskOmit;
   label?: Prisma.LabelOmit;
   taskLabel?: Prisma.TaskLabelOmit;
+  taskComment?: Prisma.TaskCommentOmit;
 };
 
 /* Types for Logging */
