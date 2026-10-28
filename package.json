@@ -12,7 +12,8 @@
     "test:watch": "vitest",
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
-    "db:logs": "docker compose logs -f db"
+    "db:logs": "docker compose logs -f db",
+    "test:api": "newman run postman/TaskFlow.postman_collection.json"
   },
   "keywords": [],
   "author": "",
@@ -44,6 +45,7 @@
     "@types/node": "^26.6.5",
     "@types/pg": "^8.23.1",
     "@types/supertest": "^7.2.1",
+    "newman": "^6.2.3",
     "prisma": "^7.10.0",
     "supertest": "^7.3.1",
     "tsx": "^4.23.15",

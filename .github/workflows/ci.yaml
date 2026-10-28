@@ -64,3 +64,76 @@ jobs:
 
       - name: Run tests
         run: pnpm test
+
+  api-smoke-tests:
+    name: API smoke tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: taskflow_smoke
+          POSTGRES_USER: taskflow
+          POSTGRES_PASSWORD: taskflow_ci_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U taskflow -d taskflow_smoke"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      NODE_ENV: test
+      PORT: 3000
+      DATABASE_URL: postgresql://taskflow:taskflow_ci_password@localhost:5432/taskflow_smoke?schema=public
+      DATABASE_URL_TEST: postgresql://taskflow:taskflow_ci_password@localhost:5432/taskflow_smoke?schema=public
+      ACCESS_TOKEN_SECRET: ci-only-secret-that-is-at-least-32-bytes-long
+      ALLOW_DEMO_SEED: "false"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4.4.0
+        with:
+          version: 12.14.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build application
+        run: pnpm build
+
+      - name: Apply database migrations
+        run: pnpm exec prisma migrate deploy
+
+      - name: Start API
+        run: |
+          nohup pnpm start > /tmp/taskflow-api.log 2>&1 &
+          echo $! > /tmp/taskflow-api.pid
+
+      - name: Wait for API readiness
+        run: |
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:3000/health/ready; then
+              echo
+              exit 0
+            fi
+            sleep 2
+          done
+
+          echo "API did not become ready. Application logs:"
+          cat /tmp/taskflow-api.log
+          exit 1
+
+      - name: Run Newman smoke tests
+        run: pnpm test:api

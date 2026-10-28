@@ -1,0 +1,178 @@
+{
+  "info": {
+    "name": "TaskFlow API",
+    "description": "Repeatable smoke and negative-path API tests for TaskFlow.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:3000"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health check",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/health"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Returns HTTP 200', function () { pm.response.to.have.status(200); });",
+              "pm.test('Reports healthy status', function () { pm.expect(pm.response.json().status).to.eql('ok'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Database readiness",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/health/ready"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Returns HTTP 200', function () { pm.response.to.have.status(200); });",
+              "pm.test('Database is connected', function () { pm.expect(pm.response.json().database).to.eql('connected'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Registration rejects an empty body",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": "{{baseUrl}}/api/v1/auth/register"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Returns HTTP 400', function () { pm.response.to.have.status(400); });",
+              "pm.test('Returns a validation error', function () { const body = pm.response.json(); pm.expect(body.error.code).to.eql('VALIDATION_ERROR'); pm.expect(body.error.details).to.be.an('array'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Login rejects an empty body",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": "{{baseUrl}}/api/v1/auth/login"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Returns HTTP 400', function () { pm.response.to.have.status(400); });",
+              "pm.test('Returns a validation error', function () { pm.expect(pm.response.json().error.code).to.eql('VALIDATION_ERROR'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Refresh rejects a missing refresh token",
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/api/v1/auth/refresh"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Returns HTTP 401', function () { pm.response.to.have.status(401); });",
+              "pm.test('Returns an invalid refresh token error', function () { pm.expect(pm.response.json().error.code).to.eql('INVALID_REFRESH_TOKEN'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Current user requires authentication",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/v1/auth/me"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Returns HTTP 401', function () { pm.response.to.have.status(401); });",
+              "pm.test('Returns an authentication error', function () { pm.expect(pm.response.json().error.code).to.eql('UNAUTHENTICATED'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Unknown route returns 404",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/this-route-should-not-exist"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Returns HTTP 404', function () { pm.response.to.have.status(404); });",
+              "pm.test('Returns a controlled not found error', function () { pm.expect(pm.response.json().error.code).to.eql('NOT_FOUND'); });"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
