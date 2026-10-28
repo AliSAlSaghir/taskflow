@@ -385,6 +385,26 @@ describe("POST /api/v1/auth/login", () => {
     expect(response.status).toBe(401);
     expect(response.body.error.code).toBe("UNAUTHENTICATED");
   });
+
+  it("rejects an access token when its session has expired", async () => {
+    const loggedIn = await createLoggedInUser("expired-session");
+
+    const session = await prisma.authSession.findFirstOrThrow({
+      where: { userId: loggedIn.userId },
+    });
+
+    await prisma.authSession.update({
+      where: { id: session.id },
+      data: { expiresAt: new Date(Date.now() - 60_000) },
+    });
+
+    const response = await request(app)
+      .get("/api/v1/auth/me")
+      .set("Cookie", loggedIn.accessCookie);
+
+    expect(response.status).toBe(401);
+    expect(response.body.error.code).toBe("UNAUTHENTICATED");
+  });
 });
 
 describe("POST /api/v1/auth/refresh", () => {

@@ -54,4 +54,49 @@ describe("access tokens", () => {
       "Access token is missing its session ID.",
     );
   });
+
+  it("rejects an expired token", async () => {
+    const secret = new TextEncoder().encode(env.ACCESS_TOKEN_SECRET);
+
+    const token = await new SignJWT({ sid: sessionId })
+      .setProtectedHeader({ alg: "HS256", typ: "JWT" })
+      .setSubject(userId)
+      .setIssuer("taskflow-api")
+      .setAudience("taskflow-client")
+      .setIssuedAt()
+      .setExpirationTime("0s")
+      .sign(secret);
+
+    await expect(verifyAccessToken(token)).rejects.toThrow();
+  });
+
+  it("rejects a token with the wrong issuer", async () => {
+    const secret = new TextEncoder().encode(env.ACCESS_TOKEN_SECRET);
+
+    const token = await new SignJWT({ sid: sessionId })
+      .setProtectedHeader({ alg: "HS256", typ: "JWT" })
+      .setSubject(userId)
+      .setIssuer("another-api")
+      .setAudience("taskflow-client")
+      .setIssuedAt()
+      .setExpirationTime("15m")
+      .sign(secret);
+
+    await expect(verifyAccessToken(token)).rejects.toThrow();
+  });
+
+  it("rejects a token with the wrong audience", async () => {
+    const secret = new TextEncoder().encode(env.ACCESS_TOKEN_SECRET);
+
+    const token = await new SignJWT({ sid: sessionId })
+      .setProtectedHeader({ alg: "HS256", typ: "JWT" })
+      .setSubject(userId)
+      .setIssuer("taskflow-api")
+      .setAudience("another-client")
+      .setIssuedAt()
+      .setExpirationTime("15m")
+      .sign(secret);
+
+    await expect(verifyAccessToken(token)).rejects.toThrow();
+  });
 });
