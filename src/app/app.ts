@@ -28,7 +28,9 @@ app.get("/health/ready", async (_req, res) => {
       status: "ready",
       database: "connected",
     });
-  } catch {
+  } catch (error) {
+    console.error("Database readiness check failed:", error);
+
     res.status(503).json({
       status: "not_ready",
     });
