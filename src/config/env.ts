@@ -11,6 +11,20 @@ const envSchema = z
 
     DATABASE_URL: z.url().startsWith("postgresql://"),
 
+    FRONTEND_ORIGIN: z
+      .url()
+      .refine((value) => {
+        const url = new URL(value);
+
+        return (
+          (url.protocol === "http:" || url.protocol === "https:") &&
+          url.origin === value &&
+          !url.username &&
+          !url.password
+        );
+      }, "FRONTEND_ORIGIN must be an origin without a path, query, or fragment.")
+      .optional(),
+
     ACCESS_TOKEN_SECRET: z.string().min(43),
 
     DATABASE_URL_TEST: z.url().startsWith("postgresql://").optional(),

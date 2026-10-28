@@ -1,15 +1,34 @@
 import express from "express";
 import helmet from "helmet";
 import cookieParser from "cookie-parser";
+import cors from "cors";
 import { prisma } from "../infrastructure/database/prisma.js";
 import { authRouter } from "../modules/auth/auth.routes.js";
 import { projectRouter } from "../modules/projects/project.routes.js";
 import { errorHandler } from "./error-handler.js";
 import { notFoundHandler } from "./not-found.js";
+import { env } from "../config/env.js";
 
 const app = express();
 
 app.disable("x-powered-by");
+
+if (env.FRONTEND_ORIGIN) {
+  app.use(
+    cors({
+      origin: (origin, callback) => {
+        if (origin === env.FRONTEND_ORIGIN) {
+          callback(null, origin);
+          return;
+        }
+
+        callback(null, false);
+      },
+      credentials: true,
+    }),
+  );
+}
+
 app.use(helmet());
 app.use(express.json({ limit: "16kb" }));
 app.use(cookieParser());
