@@ -1,6 +1,8 @@
 import request from "supertest";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { app } from "../src/app/app.js";
+import express from "express";
+import { errorHandler } from "../src/app/error-handler.js";
 
 describe("GET /health", () => {
   it("returns HTTP 200 and a healthy status", async () => {
@@ -44,4 +46,34 @@ it("returns a consistent 404 for an unknown route", async () => {
       message: "The requested resource was not found.",
     },
   });
+});
+
+it("returns a generic 500 without exposing unexpected error details", async () => {
+  const testApp = express();
+
+  testApp.get("/test-unexpected-error", (_req, _res, next) => {
+    next(new Error("Sensitive internal database details"));
+  });
+
+  testApp.use(errorHandler);
+
+  const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+  try {
+    const response = await request(testApp).get("/test-unexpected-error");
+
+    expect(response.status).toBe(500);
+    expect(response.body).toEqual({
+      error: {
+        code: "INTERNAL_SERVER_ERROR",
+        message: "An unexpected error occurred.",
+      },
+    });
+
+    expect(JSON.stringify(response.body)).not.toContain(
+      "Sensitive internal database details",
+    );
+  } finally {
+    consoleError.mockRestore();
+  }
 });
