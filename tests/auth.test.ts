@@ -321,6 +321,13 @@ describe("POST /api/v1/auth/login", () => {
 
     expect(response.status).toBe(200);
     expect(response.body.data.userId).toBeDefined();
+    expect(response.body.data.id).toBe(response.body.data.userId);
+    expect(response.body.data.email).toBeDefined();
+    expect(response.body.data.role).toBe("USER");
+    expect(response.body.data.status).toBe("ACTIVE");
+    expect(response.body.data.profile.displayName).toBe("Me Test");
+    expect(response.body.data).not.toHaveProperty("passwordHash");
+    expect(response.body.data).not.toHaveProperty("password");
   });
 
   it("rejects requests to /me without an access cookie", async () => {
