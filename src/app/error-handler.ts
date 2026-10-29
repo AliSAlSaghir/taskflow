@@ -1,6 +1,6 @@
 import type { ErrorRequestHandler } from "express";
 
-export const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
+export const errorHandler: ErrorRequestHandler = (error, req, res, _next) => {
   if (
     typeof error === "object" &&
     error !== null &&
@@ -16,7 +16,11 @@ export const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
     return;
   }
 
-  console.error("Unhandled request error:", error);
+  console.error("Unhandled request error:", {
+    method: req.method,
+    path: req.path,
+    error,
+  });
 
   res.status(500).json({
     error: {
