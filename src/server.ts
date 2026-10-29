@@ -6,6 +6,10 @@ const server = app.listen(env.PORT, () => {
   console.log(`TaskFlow API listening on port ${env.PORT}`);
 });
 
+server.headersTimeout = 10_000;
+server.requestTimeout = 30_000;
+server.keepAliveTimeout = 5_000;
+
 let shuttingDown = false;
 
 function shutdown(signal: NodeJS.Signals) {
