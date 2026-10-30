@@ -4,6 +4,7 @@ declare global {
       user: {
         id: string;
         sessionId: string;
+        role: "USER" | "ADMIN";
       };
     }
   }

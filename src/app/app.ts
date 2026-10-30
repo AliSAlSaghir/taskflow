@@ -9,6 +9,7 @@ import { errorHandler } from "./error-handler.js";
 import { notFoundHandler } from "./not-found.js";
 import { env } from "../config/env.js";
 import { profileRouter } from "../modules/profile/profile.routes.js";
+import { adminRouter } from "../modules/admin/admin.routes.js";
 
 const app = express();
 
@@ -62,6 +63,7 @@ app.get("/health/ready", async (_req, res) => {
 app.use("/api/v1/auth", authRouter);
 app.use("/api/v1/profile", profileRouter);
 app.use("/api/v1/projects", projectRouter);
+app.use("/api/v1/admin", adminRouter);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

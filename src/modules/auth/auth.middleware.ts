@@ -35,7 +35,7 @@ export const requireAuth: RequestHandler = async (req, res, next) => {
     const [user, session] = await Promise.all([
       prisma.user.findUnique({
         where: { id: identity.userId },
-        select: { id: true, status: true },
+        select: { id: true, status: true, role: true },
       }),
       prisma.authSession.findFirst({
         where: {
@@ -61,6 +61,7 @@ export const requireAuth: RequestHandler = async (req, res, next) => {
     res.locals.user = {
       id: user.id,
       sessionId: session.id,
+      role: user.role,
     };
     next();
   } catch (error: unknown) {
