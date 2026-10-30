@@ -60,7 +60,8 @@ export const ModelName = {
   Task: 'Task',
   Label: 'Label',
   TaskLabel: 'TaskLabel',
-  TaskComment: 'TaskComment'
+  TaskComment: 'TaskComment',
+  Attachment: 'Attachment'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -201,6 +202,20 @@ export const TaskCommentScalarFieldEnum = {
 } as const
 
 export type TaskCommentScalarFieldEnum = (typeof TaskCommentScalarFieldEnum)[keyof typeof TaskCommentScalarFieldEnum]
+
+
+export const AttachmentScalarFieldEnum = {
+  id: 'id',
+  taskId: 'taskId',
+  uploaderId: 'uploaderId',
+  filename: 'filename',
+  contentType: 'contentType',
+  size: 'size',
+  storageKey: 'storageKey',
+  createdAt: 'createdAt'
+} as const
+
+export type AttachmentScalarFieldEnum = (typeof AttachmentScalarFieldEnum)[keyof typeof AttachmentScalarFieldEnum]
 
 
 export const SortOrder = {

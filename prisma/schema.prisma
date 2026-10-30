@@ -23,6 +23,7 @@ model User {
   ownedProjects      Project[]
   projectMemberships ProjectMembership[]
   authoredComments TaskComment[]
+  uploadedAttachments Attachment[]
 
   @@map("users")
 }
@@ -148,6 +149,7 @@ model Task {
 
   labels TaskLabel[]
   comments TaskComment[]
+  attachments Attachment[]
 
   @@unique([projectId, id])
   @@index([projectId, archivedAt, createdAt])
@@ -197,4 +199,22 @@ model TaskComment {
 
   @@index([taskId, createdAt, id])
   @@map("task_comments")
+}
+
+model Attachment {
+  id           String   @id @default(uuid()) @db.Uuid
+  taskId       String   @map("task_id") @db.Uuid
+  uploaderId   String   @map("uploader_id") @db.Uuid
+  filename     String   @db.VarChar(255)
+  contentType  String   @map("content_type") @db.VarChar(127)
+  size         Int
+  storageKey   String   @unique @map("storage_key") @db.VarChar(255)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  task     Task @relation(fields: [taskId], references: [id], onDelete: Restrict)
+  uploader User @relation(fields: [uploaderId], references: [id], onDelete: Restrict)
+
+  @@index([taskId, createdAt, id])
+  @@index([uploaderId, createdAt])
+  @@map("attachments")
 }

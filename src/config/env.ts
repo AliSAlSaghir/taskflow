@@ -25,6 +25,12 @@ const envSchema = z
       }, "FRONTEND_ORIGIN must be an origin without a path, query, or fragment.")
       .optional(),
 
+    B2_KEY_ID: z.string().min(1).optional(),
+    B2_APPLICATION_KEY: z.string().min(1).optional(),
+    B2_BUCKET_NAME: z.string().min(1).optional(),
+    B2_REGION: z.string().min(1).optional(),
+    B2_ENDPOINT: z.url().optional(),
+
     ACCESS_TOKEN_SECRET: z.string().min(43),
 
     DATABASE_URL_TEST: z.url().startsWith("postgresql://").optional(),
@@ -41,6 +47,26 @@ const envSchema = z
         path: ["DATABASE_URL_TEST"],
         message: "DATABASE_URL_TEST is required when NODE_ENV=test.",
       });
+    }
+
+    if (data.NODE_ENV === "production") {
+      const storageFields = [
+        "B2_KEY_ID",
+        "B2_APPLICATION_KEY",
+        "B2_BUCKET_NAME",
+        "B2_REGION",
+        "B2_ENDPOINT",
+      ] as const;
+
+      for (const field of storageFields) {
+        if (!data[field]) {
+          ctx.addIssue({
+            code: "custom",
+            path: [field],
+            message: `${field} is required in production.`,
+          });
+        }
+      }
     }
   });
 

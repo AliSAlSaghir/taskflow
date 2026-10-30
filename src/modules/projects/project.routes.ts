@@ -35,6 +35,15 @@ import {
   updateCommentController,
 } from "../comments/comment.controller.js";
 
+import {
+  attachmentUpload,
+  deleteAttachmentController,
+  downloadAttachmentController,
+  handleAttachmentUploadError,
+  listAttachmentsController,
+  uploadAttachmentController,
+} from "../attachments/attachment.controller.js";
+
 const projectRouter = Router();
 
 projectRouter.post("/", requireAuth, createProjectController);
@@ -129,6 +138,32 @@ projectRouter.delete(
   "/:projectId/tasks/:taskId/comments/:commentId",
   requireAuth,
   deleteCommentController,
+);
+
+projectRouter.post(
+  "/:projectId/tasks/:taskId/attachments",
+  requireAuth,
+  attachmentUpload.single("file"),
+  handleAttachmentUploadError,
+  uploadAttachmentController,
+);
+
+projectRouter.get(
+  "/:projectId/tasks/:taskId/attachments",
+  requireAuth,
+  listAttachmentsController,
+);
+
+projectRouter.get(
+  "/:projectId/tasks/:taskId/attachments/:attachmentId",
+  requireAuth,
+  downloadAttachmentController,
+);
+
+projectRouter.delete(
+  "/:projectId/tasks/:taskId/attachments/:attachmentId",
+  requireAuth,
+  deleteAttachmentController,
 );
 
 export { projectRouter };
