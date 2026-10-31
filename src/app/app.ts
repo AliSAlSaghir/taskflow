@@ -10,6 +10,7 @@ import { notFoundHandler } from "./not-found.js";
 import { env } from "../config/env.js";
 import { profileRouter } from "../modules/profile/profile.routes.js";
 import { adminRouter } from "../modules/admin/admin.routes.js";
+import { requireTrustedOrigin } from "./middleware/require-trusted-origin.js";
 
 const app = express();
 
@@ -36,6 +37,7 @@ if (env.FRONTEND_ORIGIN) {
 app.use(helmet());
 app.use(express.json({ limit: "16kb" }));
 app.use(cookieParser());
+app.use(requireTrustedOrigin);
 
 app.get("/health", (_req, res) => {
   res.status(200).json({

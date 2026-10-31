@@ -86,6 +86,14 @@ async function createLoggedInUser(prefix: string) {
   const accessCookie = getCookiePair(headers, "access_token");
   const refreshCookie = getCookiePair(headers, "refresh_token");
 
+  const csrfResponse = await request(app)
+    .get("/api/v1/auth/csrf-token")
+    .set("Cookie", accessCookie!);
+
+  expect(csrfResponse.status).toBe(200);
+
+  const csrfToken = csrfResponse.body.data.csrfToken;
+
   expect(accessCookie).toBeDefined();
   expect(refreshCookie).toBeDefined();
 
@@ -100,6 +108,7 @@ async function createLoggedInUser(prefix: string) {
     accessCookie: accessCookie!,
     refreshCookie: refreshCookie!,
     rawRefreshToken: refreshCookie!.slice("refresh_token=".length),
+    csrfToken,
   };
 }
 
@@ -596,7 +605,8 @@ describe("POST /api/v1/auth/logout", () => {
 
     const response = await request(app)
       .post("/api/v1/auth/logout")
-      .set("Cookie", loggedIn.accessCookie);
+      .set("Cookie", loggedIn.accessCookie)
+      .set("X-CSRF-Token", loggedIn.csrfToken);
 
     expect(response.status).toBe(200);
     expect(response.body.data.loggedOut).toBe(true);
@@ -670,7 +680,8 @@ describe("POST /api/v1/auth/logout-all", () => {
 
     const response = await request(app)
       .post("/api/v1/auth/logout-all")
-      .set("Cookie", firstLogin.accessCookie);
+      .set("Cookie", firstLogin.accessCookie)
+      .set("X-CSRF-Token", firstLogin.csrfToken);
 
     expect(response.status).toBe(200);
     expect(response.body.data).toEqual({
@@ -723,7 +734,8 @@ describe("POST /api/v1/auth/logout-all", () => {
 
     const response = await request(app)
       .post("/api/v1/auth/logout-all")
-      .set("Cookie", firstUser.accessCookie);
+      .set("Cookie", firstUser.accessCookie)
+      .set("X-CSRF-Token", firstUser.csrfToken);
 
     expect(response.status).toBe(200);
 
@@ -751,5 +763,71 @@ describe("POST /api/v1/auth/logout-all", () => {
 
     expect(response.status).toBe(401);
     expect(response.body.error.code).toBe("UNAUTHENTICATED");
+  });
+});
+
+describe("CSRF protection", () => {
+  it("returns a CSRF token for an authenticated session", async () => {
+    const loggedIn = await createLoggedInUser("csrf-token");
+
+    const response = await request(app)
+      .get("/api/v1/auth/csrf-token")
+      .set("Cookie", loggedIn.accessCookie);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.csrfToken).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  it("rejects logout when the CSRF token is missing", async () => {
+    const loggedIn = await createLoggedInUser("csrf-missing");
+
+    const response = await request(app)
+      .post("/api/v1/auth/logout")
+      .set("Cookie", loggedIn.accessCookie);
+
+    expect(response.status).toBe(403);
+    expect(response.body.error.code).toBe("INVALID_CSRF_TOKEN");
+  });
+
+  it("rejects an invalid CSRF token", async () => {
+    const loggedIn = await createLoggedInUser("csrf-invalid");
+
+    const response = await request(app)
+      .post("/api/v1/auth/logout")
+      .set("Cookie", loggedIn.accessCookie)
+      .set("X-CSRF-Token", "invalid-token");
+
+    expect(response.status).toBe(403);
+    expect(response.body.error.code).toBe("INVALID_CSRF_TOKEN");
+  });
+
+  it("rejects a CSRF token belonging to another session", async () => {
+    const firstUser = await createLoggedInUser("csrf-first");
+    const secondUser = await createLoggedInUser("csrf-second");
+
+    const csrfResponse = await request(app)
+      .get("/api/v1/auth/csrf-token")
+      .set("Cookie", firstUser.accessCookie);
+
+    expect(csrfResponse.status).toBe(200);
+
+    const response = await request(app)
+      .post("/api/v1/auth/logout")
+      .set("Cookie", secondUser.accessCookie)
+      .set("X-CSRF-Token", csrfResponse.body.data.csrfToken);
+
+    expect(response.status).toBe(403);
+    expect(response.body.error.code).toBe("INVALID_CSRF_TOKEN");
+  });
+
+  it("allows logout with the valid CSRF token for its session", async () => {
+    const loggedIn = await createLoggedInUser("csrf-valid");
+
+    const response = await request(app)
+      .post("/api/v1/auth/logout")
+      .set("Cookie", loggedIn.accessCookie)
+      .set("X-CSRF-Token", loggedIn.csrfToken);
+
+    expect(response.status).toBe(200);
   });
 });

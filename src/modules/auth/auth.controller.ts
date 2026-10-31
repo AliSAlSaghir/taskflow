@@ -14,6 +14,7 @@ import {
   revokeAuthSession,
   rotateRefreshToken,
 } from "./session.service.js";
+import { createCsrfToken } from "./csrf.service.js";
 
 export async function register(
   req: Request,
@@ -241,4 +242,17 @@ export async function logoutAll(
   } catch (error: unknown) {
     return next(error);
   }
+}
+
+export function getCsrfToken(
+  _req: Request,
+  res: Response,
+): void {
+  const sessionId = res.locals.user.sessionId;
+
+  res.status(200).json({
+    data: {
+      csrfToken: createCsrfToken(sessionId),
+    },
+  });
 }
