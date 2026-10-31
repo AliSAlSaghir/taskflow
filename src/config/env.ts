@@ -49,6 +49,14 @@ const envSchema = z
       });
     }
 
+    if (data.NODE_ENV === "production" && !data.FRONTEND_ORIGIN) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["FRONTEND_ORIGIN"],
+        message: "FRONTEND_ORIGIN is required in production.",
+      });
+    }
+
     if (data.NODE_ENV === "production") {
       const storageFields = [
         "B2_KEY_ID",

@@ -39,3 +39,9 @@ export const registrationRateLimit = createRateLimiter({
   limit: isTest ? 1_000 : 5,
   message: "Too many registration attempts. Please try again later.",
 });
+
+export const refreshRateLimit = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  limit: isTest ? 1_000 : 30,
+  message: "Too many refresh attempts. Please try again later.",
+});
