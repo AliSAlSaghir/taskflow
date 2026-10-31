@@ -92,12 +92,20 @@ async function createLoggedInUser() {
   const accessCookie = getCookiePair(headers, "access_token");
   expect(accessCookie).toBeDefined();
 
+  const csrfResponse = await request(app)
+    .get("/api/v1/auth/csrf-token")
+    .set("Cookie", accessCookie!);
+
+  expect(csrfResponse.status).toBe(200);
+
+  const csrfToken = csrfResponse.body.data.csrfToken as string;
+
   const user = await prisma.user.findUniqueOrThrow({
     where: { email },
     select: { id: true },
   });
 
-  return { userId: user.id, email, accessCookie: accessCookie! };
+  return { userId: user.id, email, accessCookie: accessCookie!, csrfToken };
 }
 
 async function createProject(ownerId: string) {
@@ -118,6 +126,7 @@ describe("POST /api/v1/projects/:projectId/members", () => {
     const response = await request(app)
       .post(`/api/v1/projects/${project.id}/members`)
       .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken)
       .send({ email: member.email.toUpperCase() });
 
     expect(response.status).toBe(201);
@@ -149,6 +158,7 @@ describe("POST /api/v1/projects/:projectId/members", () => {
     const response = await request(app)
       .post(`/api/v1/projects/${project.id}/members`)
       .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken)
       .send({ email: member.email });
 
     expect(response.status).toBe(409);
@@ -164,6 +174,7 @@ describe("POST /api/v1/projects/:projectId/members", () => {
     const response = await request(app)
       .post(`/api/v1/projects/${project.id}/members`)
       .set("Cookie", nonOwner.accessCookie)
+      .set("X-CSRF-Token", nonOwner.csrfToken)
       .send({ email: member.email });
 
     expect(response.status).toBe(404);
@@ -183,6 +194,7 @@ describe("POST /api/v1/projects/:projectId/members", () => {
     const response = await request(app)
       .post(`/api/v1/projects/${project.id}/members`)
       .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken)
       .send({ email: member.email });
 
     expect(response.status).toBe(404);
@@ -196,6 +208,7 @@ describe("POST /api/v1/projects/:projectId/members", () => {
     const response = await request(app)
       .post(`/api/v1/projects/${project.id}/members`)
       .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken)
       .send({ email: owner.email });
 
     expect(response.status).toBe(404);
@@ -209,6 +222,7 @@ describe("POST /api/v1/projects/:projectId/members", () => {
     const response = await request(app)
       .post(`/api/v1/projects/${project.id}/members`)
       .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken)
       .send({ email: `missing-${randomUUID()}@example.com` });
 
     expect(response.status).toBe(404);
@@ -228,6 +242,7 @@ describe("POST /api/v1/projects/:projectId/members", () => {
     const response = await request(app)
       .post(`/api/v1/projects/${project.id}/members`)
       .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken)
       .send({ email: member.email });
 
     expect(response.status).toBe(404);
@@ -241,6 +256,7 @@ describe("POST /api/v1/projects/:projectId/members", () => {
     const response = await request(app)
       .post(`/api/v1/projects/${project.id}/members`)
       .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken)
       .send({ email: "not-an-email" });
 
     expect(response.status).toBe(400);
@@ -253,6 +269,7 @@ describe("POST /api/v1/projects/:projectId/members", () => {
     const response = await request(app)
       .post("/api/v1/projects/not-a-uuid/members")
       .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken)
       .send({ email: "member@example.com" });
 
     expect(response.status).toBe(400);
@@ -424,7 +441,8 @@ describe("DELETE /api/v1/projects/:projectId/members/:membershipId", () => {
 
     const response = await request(app)
       .delete(`/api/v1/projects/${project.id}/members/${membership.id}`)
-      .set("Cookie", owner.accessCookie);
+      .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken);
 
     expect(response.status).toBe(204);
     expect(response.text).toBe("");
@@ -458,7 +476,8 @@ describe("DELETE /api/v1/projects/:projectId/members/:membershipId", () => {
 
     const response = await request(app)
       .delete(`/api/v1/projects/${project.id}/members/${membership.id}`)
-      .set("Cookie", otherUser.accessCookie);
+      .set("Cookie", otherUser.accessCookie)
+      .set("X-CSRF-Token", otherUser.csrfToken);
 
     expect(response.status).toBe(404);
 
@@ -488,7 +507,8 @@ describe("DELETE /api/v1/projects/:projectId/members/:membershipId", () => {
 
     const response = await request(app)
       .delete(`/api/v1/projects/${project.id}/members/${membership.id}`)
-      .set("Cookie", owner.accessCookie);
+      .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken);
 
     expect(response.status).toBe(404);
 
@@ -505,7 +525,8 @@ describe("DELETE /api/v1/projects/:projectId/members/:membershipId", () => {
 
     const response = await request(app)
       .delete(`/api/v1/projects/${project.id}/members/${randomUUID()}`)
-      .set("Cookie", owner.accessCookie);
+      .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken);
 
     expect(response.status).toBe(404);
   });
@@ -525,7 +546,8 @@ describe("DELETE /api/v1/projects/:projectId/members/:membershipId", () => {
 
     const response = await request(app)
       .delete(`/api/v1/projects/${secondProject.id}/members/${membership.id}`)
-      .set("Cookie", owner.accessCookie);
+      .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken);
 
     expect(response.status).toBe(404);
 
@@ -542,11 +564,13 @@ describe("DELETE /api/v1/projects/:projectId/members/:membershipId", () => {
 
     const invalidProjectIdResponse = await request(app)
       .delete(`/api/v1/projects/not-a-uuid/members/${randomUUID()}`)
-      .set("Cookie", owner.accessCookie);
+      .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken);
 
     const invalidMembershipIdResponse = await request(app)
       .delete(`/api/v1/projects/${project.id}/members/not-a-uuid`)
-      .set("Cookie", owner.accessCookie);
+      .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken);
 
     expect(invalidProjectIdResponse.status).toBe(400);
     expect(invalidMembershipIdResponse.status).toBe(400);
@@ -556,7 +580,6 @@ describe("DELETE /api/v1/projects/:projectId/members/:membershipId", () => {
     const response = await request(app).delete(
       `/api/v1/projects/${randomUUID()}/members/${randomUUID()}`,
     );
-
     expect(response.status).toBe(401);
   });
 
@@ -582,7 +605,8 @@ describe("DELETE /api/v1/projects/:projectId/members/:membershipId", () => {
 
     const response = await request(app)
       .delete(`/api/v1/projects/${project.id}/members/${membership.id}`)
-      .set("Cookie", owner.accessCookie);
+      .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken);
 
     expect(response.status).toBe(409);
     expect(response.body.error.code).toBe("MEMBER_HAS_ASSIGNED_TASKS");
@@ -627,7 +651,8 @@ describe("DELETE /api/v1/projects/:projectId/members/:membershipId", () => {
 
     const response = await request(app)
       .delete(`/api/v1/projects/${project.id}/members/${membership.id}`)
-      .set("Cookie", owner.accessCookie);
+      .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken);
 
     expect(response.status).toBe(204);
 
@@ -663,7 +688,8 @@ describe("DELETE /api/v1/projects/:projectId/members/:membershipId", () => {
 
     const response = await request(app)
       .delete(`/api/v1/projects/${project.id}/members/${membership.id}`)
-      .set("Cookie", owner.accessCookie);
+      .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken);
 
     expect(response.status).toBe(409);
     expect(response.body.error.code).toBe("MEMBER_HAS_ASSIGNED_TASKS");

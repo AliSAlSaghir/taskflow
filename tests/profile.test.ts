@@ -102,6 +102,14 @@ async function createLoggedInUser() {
   const accessCookie = getCookiePair(headers, "access_token");
   expect(accessCookie).toBeDefined();
 
+  const csrfResponse = await request(app)
+    .get("/api/v1/auth/csrf-token")
+    .set("Cookie", accessCookie!);
+
+  expect(csrfResponse.status).toBe(200);
+
+  const csrfToken = csrfResponse.body.data.csrfToken as string;
+
   const user = await prisma.user.findUniqueOrThrow({
     where: { email },
     select: { id: true },
@@ -110,6 +118,7 @@ async function createLoggedInUser() {
   return {
     userId: user.id,
     accessCookie: accessCookie!,
+    csrfToken,
   };
 }
 
@@ -120,6 +129,7 @@ describe("PATCH /api/v1/profile", () => {
     const response = await request(app)
       .patch("/api/v1/profile")
       .set("Cookie", user.accessCookie)
+      .set("X-CSRF-Token", user.csrfToken)
       .send({ displayName: "  New Display Name  " });
 
     expect(response.status).toBe(200);
@@ -138,6 +148,7 @@ describe("PATCH /api/v1/profile", () => {
     const updateResponse = await request(app)
       .patch("/api/v1/profile")
       .set("Cookie", user.accessCookie)
+      .set("X-CSRF-Token", user.csrfToken)
       .send({ bio: "  Learning backend development.  " });
 
     expect(updateResponse.status).toBe(200);
@@ -148,6 +159,7 @@ describe("PATCH /api/v1/profile", () => {
     const clearResponse = await request(app)
       .patch("/api/v1/profile")
       .set("Cookie", user.accessCookie)
+      .set("X-CSRF-Token", user.csrfToken)
       .send({ bio: null });
 
     expect(clearResponse.status).toBe(200);
@@ -160,6 +172,7 @@ describe("PATCH /api/v1/profile", () => {
     const response = await request(app)
       .patch("/api/v1/profile")
       .set("Cookie", user.accessCookie)
+      .set("X-CSRF-Token", user.csrfToken)
       .send({});
 
     expect(response.status).toBe(400);
@@ -172,6 +185,7 @@ describe("PATCH /api/v1/profile", () => {
     const response = await request(app)
       .patch("/api/v1/profile")
       .set("Cookie", user.accessCookie)
+      .set("X-CSRF-Token", user.csrfToken)
       .send({ displayName: " " });
 
     expect(response.status).toBe(400);
@@ -184,6 +198,7 @@ describe("PATCH /api/v1/profile", () => {
     const response = await request(app)
       .patch("/api/v1/profile")
       .set("Cookie", user.accessCookie)
+      .set("X-CSRF-Token", user.csrfToken)
       .send({ bio: "a".repeat(501) });
 
     expect(response.status).toBe(400);
@@ -196,6 +211,7 @@ describe("PATCH /api/v1/profile", () => {
     const response = await request(app)
       .patch("/api/v1/profile")
       .set("Cookie", user.accessCookie)
+      .set("X-CSRF-Token", user.csrfToken)
       .send({
         displayName: "Changed Name",
         userId: randomUUID(),
@@ -223,6 +239,7 @@ describe("PATCH /api/v1/profile", () => {
       const response = await request(app)
         .put("/api/v1/profile/picture")
         .set("Cookie", user.accessCookie)
+        .set("X-CSRF-Token", user.csrfToken)
         .attach("file", image, {
           filename: "profile.jpg",
           contentType: "image/jpeg",
@@ -254,7 +271,8 @@ describe("PATCH /api/v1/profile", () => {
 
       const response = await request(app)
         .put("/api/v1/profile/picture")
-        .set("Cookie", user.accessCookie);
+        .set("Cookie", user.accessCookie)
+        .set("X-CSRF-Token", user.csrfToken);
 
       expect(response.status).toBe(400);
       expect(response.body.error.code).toBe("VALIDATION_ERROR");
@@ -266,6 +284,7 @@ describe("PATCH /api/v1/profile", () => {
       const response = await request(app)
         .put("/api/v1/profile/picture")
         .set("Cookie", user.accessCookie)
+        .set("X-CSRF-Token", user.csrfToken)
         .attach("file", Buffer.from("not an image"), {
           filename: "document.pdf",
           contentType: "application/pdf",
@@ -284,6 +303,7 @@ describe("PATCH /api/v1/profile", () => {
       const response = await request(app)
         .put("/api/v1/profile/picture")
         .set("Cookie", user.accessCookie)
+        .set("X-CSRF-Token", user.csrfToken)
         .attach("file", largeImage, {
           filename: "large.jpg",
           contentType: "image/jpeg",
@@ -300,6 +320,7 @@ describe("PATCH /api/v1/profile", () => {
       const response = await request(app)
         .put("/api/v1/profile/picture")
         .set("Cookie", user.accessCookie)
+        .set("X-CSRF-Token", user.csrfToken)
         .attach("file", Buffer.from("this is not a JPEG"), {
           filename: "fake.jpg",
           contentType: "image/jpeg",
@@ -319,6 +340,7 @@ describe("PATCH /api/v1/profile", () => {
     const firstUpload = await request(app)
       .put("/api/v1/profile/picture")
       .set("Cookie", user.accessCookie)
+      .set("X-CSRF-Token", user.csrfToken)
       .attach("file", firstImage, {
         filename: "first.jpg",
         contentType: "image/jpeg",
@@ -331,6 +353,7 @@ describe("PATCH /api/v1/profile", () => {
     const secondUpload = await request(app)
       .put("/api/v1/profile/picture")
       .set("Cookie", user.accessCookie)
+      .set("X-CSRF-Token", user.csrfToken)
       .attach("file", secondImage, {
         filename: "second.jpg",
         contentType: "image/jpeg",
@@ -358,6 +381,7 @@ describe("PATCH /api/v1/profile", () => {
     const firstUpload = await request(app)
       .put("/api/v1/profile/picture")
       .set("Cookie", user.accessCookie)
+      .set("X-CSRF-Token", user.csrfToken)
       .attach("file", image, {
         filename: "first.jpg",
         contentType: "image/jpeg",
@@ -374,6 +398,7 @@ describe("PATCH /api/v1/profile", () => {
     const failedUpload = await request(app)
       .put("/api/v1/profile/picture")
       .set("Cookie", user.accessCookie)
+      .set("X-CSRF-Token", user.csrfToken)
       .attach("file", image, {
         filename: "replacement.jpg",
         contentType: "image/jpeg",
@@ -401,6 +426,7 @@ describe("GET /api/v1/profile/:userId/picture", () => {
     const uploadResponse = await request(app)
       .put("/api/v1/profile/picture")
       .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken)
       .attach("file", image, {
         filename: "profile.jpg",
         contentType: "image/jpeg",
@@ -462,6 +488,7 @@ describe("GET /api/v1/profile/:userId/picture", () => {
     const uploadResponse = await request(app)
       .put("/api/v1/profile/picture")
       .set("Cookie", user.accessCookie)
+      .set("X-CSRF-Token", user.csrfToken)
       .attach("file", image, {
         filename: "profile.jpg",
         contentType: "image/jpeg",
@@ -491,6 +518,7 @@ describe("DELETE /api/v1/profile/picture", () => {
     const uploadResponse = await request(app)
       .put("/api/v1/profile/picture")
       .set("Cookie", user.accessCookie)
+      .set("X-CSRF-Token", user.csrfToken)
       .attach("file", image, {
         filename: "profile.jpg",
         contentType: "image/jpeg",
@@ -502,7 +530,8 @@ describe("DELETE /api/v1/profile/picture", () => {
 
     const response = await request(app)
       .delete("/api/v1/profile/picture")
-      .set("Cookie", user.accessCookie);
+      .set("Cookie", user.accessCookie)
+      .set("X-CSRF-Token", user.csrfToken);
 
     expect(response.status).toBe(200);
     expect(response.body.data.deleted).toBe(true);
@@ -524,6 +553,7 @@ describe("DELETE /api/v1/profile/picture", () => {
     const uploadResponse = await request(app)
       .put("/api/v1/profile/picture")
       .set("Cookie", user.accessCookie)
+      .set("X-CSRF-Token", user.csrfToken)
       .attach("file", image, {
         filename: "profile.jpg",
         contentType: "image/jpeg",
@@ -539,7 +569,8 @@ describe("DELETE /api/v1/profile/picture", () => {
 
     const response = await request(app)
       .delete("/api/v1/profile/picture")
-      .set("Cookie", user.accessCookie);
+      .set("Cookie", user.accessCookie)
+      .set("X-CSRF-Token", user.csrfToken);
 
     expect(response.status).toBe(200);
     expect(response.body.data.deleted).toBe(true);
@@ -557,7 +588,8 @@ describe("DELETE /api/v1/profile/picture", () => {
 
     const response = await request(app)
       .delete("/api/v1/profile/picture")
-      .set("Cookie", user.accessCookie);
+      .set("Cookie", user.accessCookie)
+      .set("X-CSRF-Token", user.csrfToken);
 
     expect(response.status).toBe(404);
     expect(response.body.error.code).toBe("PROFILE_PICTURE_NOT_FOUND");

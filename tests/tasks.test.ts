@@ -167,12 +167,20 @@ async function createLoggedInUser() {
   const accessCookie = getCookiePair(headers, "access_token");
   expect(accessCookie).toBeDefined();
 
+  const csrfResponse = await request(app)
+    .get("/api/v1/auth/csrf-token")
+    .set("Cookie", accessCookie!);
+
+  expect(csrfResponse.status).toBe(200);
+
+  const csrfToken = csrfResponse.body.data.csrfToken as string;
+
   const user = await prisma.user.findUniqueOrThrow({
     where: { email },
     select: { id: true },
   });
 
-  return { userId: user.id, accessCookie: accessCookie! };
+  return { userId: user.id, accessCookie: accessCookie!, csrfToken };
 }
 
 describe("POST /api/v1/projects/:projectId/tasks", () => {
@@ -189,6 +197,7 @@ describe("POST /api/v1/projects/:projectId/tasks", () => {
     const response = await request(app)
       .post(`/api/v1/projects/${project.id}/tasks`)
       .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken)
       .send({ title: "Prepare project documentation" });
 
     expect(response.status).toBe(201);
@@ -244,6 +253,7 @@ describe("POST /api/v1/projects/:projectId/tasks", () => {
     const response = await request(app)
       .post(`/api/v1/projects/${project.id}/tasks`)
       .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken)
       .send({
         title: "   ",
         priority: "URGENT",
@@ -274,6 +284,7 @@ describe("POST /api/v1/projects/:projectId/tasks", () => {
     const response = await request(app)
       .post(`/api/v1/projects/${project.id}/tasks`)
       .set("Cookie", otherUser.accessCookie)
+      .set("X-CSRF-Token", otherUser.csrfToken)
       .send({ title: "Unauthorized task" });
 
     expect(response.status).toBe(404);
@@ -300,6 +311,7 @@ describe("POST /api/v1/projects/:projectId/tasks", () => {
     const response = await request(app)
       .post(`/api/v1/projects/${project.id}/tasks`)
       .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken)
       .send({ title: "Task in archived project" });
 
     expect(response.status).toBe(404);
@@ -333,6 +345,7 @@ describe("POST /api/v1/projects/:projectId/tasks", () => {
     const response = await request(app)
       .post(`/api/v1/projects/${project.id}/tasks`)
       .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken)
       .send({
         title: "Review the requirements",
         assigneeId: member.userId,
@@ -368,6 +381,7 @@ describe("POST /api/v1/projects/:projectId/tasks", () => {
     const response = await request(app)
       .post(`/api/v1/projects/${project.id}/tasks`)
       .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken)
       .send({
         title: "Task with invalid assignee",
         assigneeId: nonMember.userId,
@@ -409,6 +423,7 @@ describe("POST /api/v1/projects/:projectId/tasks", () => {
     const response = await request(app)
       .post(`/api/v1/projects/${project.id}/tasks`)
       .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken)
       .send({
         title: "Task for disabled member",
         assigneeId: member.userId,
@@ -1431,6 +1446,7 @@ describe("PATCH /api/v1/projects/:projectId/tasks/:taskId", () => {
     const response = await request(app)
       .patch(`/api/v1/projects/${project.id}/tasks/${task.id}`)
       .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken)
       .send({
         title: "Updated title",
         priority: "HIGH",
@@ -1487,6 +1503,7 @@ describe("PATCH /api/v1/projects/:projectId/tasks/:taskId", () => {
     const response = await request(app)
       .patch(`/api/v1/projects/${project.id}/tasks/${task.id}`)
       .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken)
       .send({
         description: null,
         assigneeId: null,
@@ -1538,6 +1555,7 @@ describe("PATCH /api/v1/projects/:projectId/tasks/:taskId", () => {
     const response = await request(app)
       .patch(`/api/v1/projects/${project.id}/tasks/${task.id}`)
       .set("Cookie", member.accessCookie)
+      .set("X-CSRF-Token", member.csrfToken)
       .send({ status: "IN_PROGRESS" });
 
     expect(response.status).toBe(200);
@@ -1579,6 +1597,7 @@ describe("PATCH /api/v1/projects/:projectId/tasks/:taskId", () => {
     const response = await request(app)
       .patch(`/api/v1/projects/${project.id}/tasks/${task.id}`)
       .set("Cookie", member.accessCookie)
+      .set("X-CSRF-Token", member.csrfToken)
       .send({
         title: "Unauthorized title",
         priority: "HIGH",
@@ -1625,6 +1644,7 @@ describe("PATCH /api/v1/projects/:projectId/tasks/:taskId", () => {
     const response = await request(app)
       .patch(`/api/v1/projects/${project.id}/tasks/${task.id}`)
       .set("Cookie", otherMember.accessCookie)
+      .set("X-CSRF-Token", otherMember.csrfToken)
       .send({ status: "COMPLETED" });
 
     expect(response.status).toBe(403);
@@ -1649,6 +1669,7 @@ describe("PATCH /api/v1/projects/:projectId/tasks/:taskId", () => {
     const response = await request(app)
       .patch(`/api/v1/projects/${project.id}/tasks/not-a-uuid`)
       .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken)
       .send({ title: "Updated title" });
 
     expect(response.status).toBe(400);
@@ -1675,6 +1696,7 @@ describe("PATCH /api/v1/projects/:projectId/tasks/:taskId", () => {
     const response = await request(app)
       .patch(`/api/v1/projects/${project.id}/tasks/${task.id}`)
       .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken)
       .send({});
 
     expect(response.status).toBe(400);
@@ -1694,6 +1716,7 @@ describe("PATCH /api/v1/projects/:projectId/tasks/:taskId", () => {
     const response = await request(app)
       .patch(`/api/v1/projects/${project.id}/tasks/${randomUUID()}`)
       .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken)
       .send({ title: "Updated title" });
 
     expect(response.status).toBe(404);
@@ -1721,6 +1744,7 @@ describe("PATCH /api/v1/projects/:projectId/tasks/:taskId", () => {
     const response = await request(app)
       .patch(`/api/v1/projects/${project.id}/tasks/${task.id}`)
       .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken)
       .send({ title: "Updated title" });
 
     expect(response.status).toBe(404);
@@ -1762,6 +1786,7 @@ describe("PATCH /api/v1/projects/:projectId/tasks/:taskId", () => {
     const response = await request(app)
       .patch(`/api/v1/projects/${project.id}/tasks/${task.id}`)
       .set("Cookie", member.accessCookie)
+      .set("X-CSRF-Token", member.csrfToken)
       .send({ status: "COMPLETED" });
 
     expect(response.status).toBe(404);
@@ -1806,6 +1831,7 @@ describe("PATCH /api/v1/projects/:projectId/tasks/:taskId", () => {
     const response = await request(app)
       .patch(`/api/v1/projects/${project.id}/tasks/${task.id}`)
       .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken)
       .send({ assigneeId: member.userId });
 
     expect(response.status).toBe(404);
@@ -1839,7 +1865,8 @@ describe("DELETE /api/v1/projects/:projectId/tasks/:taskId", () => {
 
     const response = await request(app)
       .delete(`/api/v1/projects/${project.id}/tasks/${task.id}`)
-      .set("Cookie", owner.accessCookie);
+      .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken);
 
     expect(response.status).toBe(200);
     expect(response.body.data.id).toBe(task.id);
@@ -1872,7 +1899,8 @@ describe("DELETE /api/v1/projects/:projectId/tasks/:taskId", () => {
 
     const response = await request(app)
       .delete(`/api/v1/projects/${project.id}/tasks/${task.id}`)
-      .set("Cookie", otherUser.accessCookie);
+      .set("Cookie", otherUser.accessCookie)
+      .set("X-CSRF-Token", otherUser.csrfToken);
 
     expect(response.status).toBe(404);
     expect(response.body.error.code).toBe("NOT_FOUND");
@@ -1896,7 +1924,8 @@ describe("DELETE /api/v1/projects/:projectId/tasks/:taskId", () => {
 
     const response = await request(app)
       .delete(`/api/v1/projects/${project.id}/tasks/${randomUUID()}`)
-      .set("Cookie", owner.accessCookie);
+      .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken);
 
     expect(response.status).toBe(404);
     expect(response.body.error.code).toBe("NOT_FOUND");
@@ -1922,7 +1951,8 @@ describe("DELETE /api/v1/projects/:projectId/tasks/:taskId", () => {
 
     const response = await request(app)
       .delete(`/api/v1/projects/${project.id}/tasks/${task.id}`)
-      .set("Cookie", owner.accessCookie);
+      .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken);
 
     expect(response.status).toBe(200);
     expect(response.body.data.archivedAt).not.toBeNull();
@@ -1948,7 +1978,8 @@ describe("DELETE /api/v1/projects/:projectId/tasks/:taskId", () => {
 
     const response = await request(app)
       .delete(`/api/v1/projects/${project.id}/tasks/${task.id}`)
-      .set("Cookie", owner.accessCookie);
+      .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken);
 
     expect(response.status).toBe(404);
     expect(response.body.error.code).toBe("NOT_FOUND");
@@ -2017,7 +2048,8 @@ describe("POST /api/v1/projects/:projectId/tasks/:taskId/restore", () => {
 
     const response = await request(app)
       .post(`/api/v1/projects/${project.id}/tasks/${task.id}/restore`)
-      .set("Cookie", owner.accessCookie);
+      .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken);
 
     expect(response.status).toBe(200);
     expect(response.body.data).toMatchObject({
@@ -2059,7 +2091,8 @@ describe("POST /api/v1/projects/:projectId/tasks/:taskId/restore", () => {
 
     const response = await request(app)
       .post(`/api/v1/projects/${project.id}/tasks/${task.id}/restore`)
-      .set("Cookie", otherUser.accessCookie);
+      .set("Cookie", otherUser.accessCookie)
+      .set("X-CSRF-Token", otherUser.csrfToken);
 
     expect(response.status).toBe(404);
     expect(response.body.error.code).toBe("NOT_FOUND");
@@ -2083,7 +2116,8 @@ describe("POST /api/v1/projects/:projectId/tasks/:taskId/restore", () => {
 
     const response = await request(app)
       .post(`/api/v1/projects/${project.id}/tasks/${randomUUID()}/restore`)
-      .set("Cookie", owner.accessCookie);
+      .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken);
 
     expect(response.status).toBe(404);
     expect(response.body.error.code).toBe("NOT_FOUND");
@@ -2108,7 +2142,8 @@ describe("POST /api/v1/projects/:projectId/tasks/:taskId/restore", () => {
 
     const response = await request(app)
       .post(`/api/v1/projects/${project.id}/tasks/${task.id}/restore`)
-      .set("Cookie", owner.accessCookie);
+      .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken);
 
     expect(response.status).toBe(200);
     expect(response.body.data.archivedAt).toBeNull();

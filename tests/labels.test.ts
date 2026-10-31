@@ -114,6 +114,14 @@ async function createLoggedInUser() {
   const accessCookie = getCookiePair(headers, "access_token");
   expect(accessCookie).toBeDefined();
 
+  const csrfResponse = await request(app)
+    .get("/api/v1/auth/csrf-token")
+    .set("Cookie", accessCookie!);
+
+  expect(csrfResponse.status).toBe(200);
+
+  const csrfToken = csrfResponse.body.data.csrfToken as string;
+
   const user = await prisma.user.findUniqueOrThrow({
     where: { email },
     select: { id: true },
@@ -122,6 +130,7 @@ async function createLoggedInUser() {
   return {
     userId: user.id,
     accessCookie: accessCookie!,
+    csrfToken,
   };
 }
 
@@ -142,6 +151,7 @@ describe("POST /api/v1/projects/:projectId/labels", () => {
     const response = await request(app)
       .post(`/api/v1/projects/${project.id}/labels`)
       .set("Cookie", user.accessCookie)
+      .set("X-CSRF-Token", user.csrfToken)
       .send({ name: " Bug " });
 
     expect(response.status).toBe(201);
@@ -182,6 +192,7 @@ describe("POST /api/v1/projects/:projectId/labels", () => {
     const firstResponse = await request(app)
       .post(`/api/v1/projects/${project.id}/labels`)
       .set("Cookie", user.accessCookie)
+      .set("X-CSRF-Token", user.csrfToken)
       .send({ name: "Bug" });
 
     expect(firstResponse.status).toBe(201);
@@ -189,6 +200,7 @@ describe("POST /api/v1/projects/:projectId/labels", () => {
     const secondResponse = await request(app)
       .post(`/api/v1/projects/${project.id}/labels`)
       .set("Cookie", user.accessCookie)
+      .set("X-CSRF-Token", user.csrfToken)
       .send({ name: "Bug" });
 
     expect(secondResponse.status).toBe(409);
@@ -203,6 +215,7 @@ describe("POST /api/v1/projects/:projectId/labels", () => {
       const response = await request(app)
         .post(`/api/v1/projects/${project.id}/labels`)
         .set("Cookie", user.accessCookie)
+        .set("X-CSRF-Token", user.csrfToken)
         .send({ name });
 
       expect(response.status).toBe(400);
@@ -218,6 +231,7 @@ describe("POST /api/v1/projects/:projectId/labels", () => {
     const response = await request(app)
       .post(`/api/v1/projects/${project.id}/labels`)
       .set("Cookie", otherUser.accessCookie)
+      .set("X-CSRF-Token", otherUser.csrfToken)
       .send({ name: "Unauthorized Label" });
 
     expect(response.status).toBe(404);
@@ -246,6 +260,7 @@ describe("POST /api/v1/projects/:projectId/labels", () => {
     const response = await request(app)
       .post(`/api/v1/projects/${project.id}/labels`)
       .set("Cookie", user.accessCookie)
+      .set("X-CSRF-Token", user.csrfToken)
       .send({ name: "Bug" });
 
     expect(response.status).toBe(409);
@@ -287,7 +302,8 @@ describe("GET /api/v1/projects/:projectId/labels", () => {
 
     const response = await request(app)
       .get(`/api/v1/projects/${project.id}/labels`)
-      .set("Cookie", otherUser.accessCookie);
+      .set("Cookie", otherUser.accessCookie)
+      .set("X-CSRF-Token", otherUser.csrfToken);
 
     expect(response.status).toBe(404);
     expect(response.body.error.code).toBe("NOT_FOUND");
@@ -335,7 +351,8 @@ describe("DELETE /api/v1/projects/:projectId/labels/:labelId", () => {
 
     const response = await request(app)
       .delete(`/api/v1/projects/${project.id}/labels/${label.id}`)
-      .set("Cookie", user.accessCookie);
+      .set("Cookie", user.accessCookie)
+      .set("X-CSRF-Token", user.csrfToken);
 
     expect(response.status).toBe(204);
 
@@ -375,7 +392,8 @@ describe("DELETE /api/v1/projects/:projectId/labels/:labelId", () => {
 
     const response = await request(app)
       .delete(`/api/v1/projects/${project.id}/labels/${randomUUID()}`)
-      .set("Cookie", user.accessCookie);
+      .set("Cookie", user.accessCookie)
+      .set("X-CSRF-Token", user.csrfToken);
 
     expect(response.status).toBe(404);
     expect(response.body.error.code).toBe("NOT_FOUND");
@@ -395,7 +413,8 @@ describe("DELETE /api/v1/projects/:projectId/labels/:labelId", () => {
 
     const response = await request(app)
       .delete(`/api/v1/projects/${project.id}/labels/${label.id}`)
-      .set("Cookie", otherUser.accessCookie);
+      .set("Cookie", otherUser.accessCookie)
+      .set("X-CSRF-Token", otherUser.csrfToken);
 
     expect(response.status).toBe(404);
     expect(response.body.error.code).toBe("NOT_FOUND");
@@ -431,7 +450,8 @@ describe("DELETE /api/v1/projects/:projectId/labels/:labelId", () => {
 
     const response = await request(app)
       .delete(`/api/v1/projects/${project.id}/labels/${label.id}`)
-      .set("Cookie", user.accessCookie);
+      .set("Cookie", user.accessCookie)
+      .set("X-CSRF-Token", user.csrfToken);
 
     expect(response.status).toBe(409);
     expect(response.body.error.code).toBe("PROJECT_ARCHIVED");
@@ -498,7 +518,8 @@ describe("DELETE /api/v1/projects/:projectId/labels/:labelId", () => {
       .delete(
         `/api/v1/projects/${project.id}/tasks/${task.id}/labels/${label.id}`,
       )
-      .set("Cookie", otherUser.accessCookie);
+      .set("Cookie", otherUser.accessCookie)
+      .set("X-CSRF-Token", otherUser.csrfToken);
 
     expect(response.status).toBe(404);
     expect(response.body.error.code).toBe("NOT_FOUND");
@@ -550,7 +571,8 @@ describe("DELETE /api/v1/projects/:projectId/labels/:labelId", () => {
       .delete(
         `/api/v1/projects/${project.id}/tasks/${task.id}/labels/${label.id}`,
       )
-      .set("Cookie", user.accessCookie);
+      .set("Cookie", user.accessCookie)
+      .set("X-CSRF-Token", user.csrfToken);
 
     expect(response.status).toBe(409);
     expect(response.body.error.code).toBe("PROJECT_ARCHIVED");
@@ -615,7 +637,8 @@ describe("PUT /api/v1/projects/:projectId/tasks/:taskId/labels/:labelId", () => 
 
     const response = await request(app)
       .put(`/api/v1/projects/${project.id}/tasks/${task.id}/labels/${label.id}`)
-      .set("Cookie", user.accessCookie);
+      .set("Cookie", user.accessCookie)
+      .set("X-CSRF-Token", user.csrfToken);
 
     expect(response.status).toBe(204);
 
@@ -653,11 +676,13 @@ describe("PUT /api/v1/projects/:projectId/tasks/:taskId/labels/:labelId", () => 
 
     const firstResponse = await request(app)
       .put(url)
-      .set("Cookie", user.accessCookie);
+      .set("Cookie", user.accessCookie)
+      .set("X-CSRF-Token", user.csrfToken);
 
     const secondResponse = await request(app)
       .put(url)
-      .set("Cookie", user.accessCookie);
+      .set("Cookie", user.accessCookie)
+      .set("X-CSRF-Token", user.csrfToken);
 
     expect(firstResponse.status).toBe(204);
     expect(secondResponse.status).toBe(204);
@@ -694,7 +719,8 @@ describe("PUT /api/v1/projects/:projectId/tasks/:taskId/labels/:labelId", () => 
 
     const response = await request(app)
       .put(`/api/v1/projects/${project.id}/tasks/${task.id}/labels/${label.id}`)
-      .set("Cookie", otherUser.accessCookie);
+      .set("Cookie", otherUser.accessCookie)
+      .set("X-CSRF-Token", otherUser.csrfToken);
 
     expect(response.status).toBe(404);
     expect(response.body.error.code).toBe("NOT_FOUND");
@@ -732,7 +758,8 @@ describe("PUT /api/v1/projects/:projectId/tasks/:taskId/labels/:labelId", () => 
 
     const response = await request(app)
       .put(`/api/v1/projects/${project.id}/tasks/${task.id}/labels/${label.id}`)
-      .set("Cookie", user.accessCookie);
+      .set("Cookie", user.accessCookie)
+      .set("X-CSRF-Token", user.csrfToken);
 
     expect(response.status).toBe(404);
     expect(response.body.error.code).toBe("NOT_FOUND");
@@ -770,7 +797,8 @@ describe("PUT /api/v1/projects/:projectId/tasks/:taskId/labels/:labelId", () => 
 
     const response = await request(app)
       .put(`/api/v1/projects/${project.id}/tasks/${task.id}/labels/${label.id}`)
-      .set("Cookie", user.accessCookie);
+      .set("Cookie", user.accessCookie)
+      .set("X-CSRF-Token", user.csrfToken);
 
     expect(response.status).toBe(404);
     expect(response.body.error.code).toBe("NOT_FOUND");
@@ -813,7 +841,8 @@ describe("PUT /api/v1/projects/:projectId/tasks/:taskId/labels/:labelId", () => 
 
     const response = await request(app)
       .put(`/api/v1/projects/${project.id}/tasks/${task.id}/labels/${label.id}`)
-      .set("Cookie", user.accessCookie);
+      .set("Cookie", user.accessCookie)
+      .set("X-CSRF-Token", user.csrfToken);
 
     expect(response.status).toBe(409);
     expect(response.body.error.code).toBe("PROJECT_ARCHIVED");
@@ -877,7 +906,8 @@ describe("DELETE /api/v1/projects/:projectId/tasks/:taskId/labels/:labelId", () 
       .delete(
         `/api/v1/projects/${project.id}/tasks/${task.id}/labels/${label.id}`,
       )
-      .set("Cookie", user.accessCookie);
+      .set("Cookie", user.accessCookie)
+      .set("X-CSRF-Token", user.csrfToken);
 
     expect(response.status).toBe(204);
 
@@ -935,8 +965,8 @@ describe("DELETE /api/v1/projects/:projectId/tasks/:taskId/labels/:labelId", () 
       .delete(
         `/api/v1/projects/${project.id}/tasks/${task.id}/labels/${label.id}`,
       )
-      .set("Cookie", user.accessCookie);
-
+      .set("Cookie", user.accessCookie)
+      .set("X-CSRF-Token", user.csrfToken);
     expect(response.status).toBe(404);
     expect(response.body.error.code).toBe("NOT_FOUND");
   });

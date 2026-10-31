@@ -61,6 +61,14 @@ async function createLoggedInUser() {
   const accessCookie = getCookiePair(headers, "access_token");
   expect(accessCookie).toBeDefined();
 
+  const csrfResponse = await request(app)
+    .get("/api/v1/auth/csrf-token")
+    .set("Cookie", accessCookie!);
+
+  expect(csrfResponse.status).toBe(200);
+
+  const csrfToken = csrfResponse.body.data.csrfToken as string;
+
   const user = await prisma.user.findUniqueOrThrow({
     where: { email },
     select: { id: true },
@@ -69,6 +77,7 @@ async function createLoggedInUser() {
   return {
     userId: user.id,
     accessCookie: accessCookie!,
+    csrfToken,
   };
 }
 
@@ -180,6 +189,7 @@ describe("Task attachments", () => {
     const response = await request(app)
       .post(`/api/v1/projects/${project.id}/tasks/${task.id}/attachments`)
       .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken)
       .attach("file", fileContents, {
         filename: "notes.txt",
         contentType: "text/plain",
@@ -233,6 +243,7 @@ describe("Task attachments", () => {
     const response = await request(app)
       .post(`/api/v1/projects/${project.id}/tasks/${task.id}/attachments`)
       .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken)
       .attach("file", fileContents, {
         filename: "animation.gif",
         contentType: "image/gif",
@@ -260,6 +271,7 @@ describe("Task attachments", () => {
     const response = await request(app)
       .post(`/api/v1/projects/${project.id}/tasks/${task.id}/attachments`)
       .set("Cookie", member.accessCookie)
+      .set("X-CSRF-Token", member.csrfToken)
       .attach("file", fileContents, {
         filename: "notes.txt",
         contentType: "text/plain",
@@ -283,6 +295,7 @@ describe("Task attachments", () => {
     const response = await request(app)
       .post(`/api/v1/projects/${project.id}/tasks/${task.id}/attachments`)
       .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken)
       .attach("file", fileContents, {
         filename: "notes.txt",
         contentType: "text/plain",
@@ -301,6 +314,7 @@ describe("Task attachments", () => {
     const response = await request(app)
       .post(`/api/v1/projects/${project.id}/tasks/${task.id}/attachments`)
       .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken)
       .attach("file", fileContents, {
         filename: "notes.png",
         contentType: "image/png",
@@ -327,6 +341,7 @@ describe("Task attachments", () => {
     const response = await request(app)
       .post(`/api/v1/projects/${project.id}/tasks/${task.id}/attachments`)
       .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken)
       .attach("file", fileContents, {
         filename: "notes.txt",
         contentType: "text/plain",
@@ -348,6 +363,7 @@ describe("Task attachments", () => {
     const upload = await request(app)
       .post(`/api/v1/projects/${project.id}/tasks/${task.id}/attachments`)
       .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken)
       .attach("file", fileContents, {
         filename: "notes.txt",
         contentType: "text/plain",
@@ -382,6 +398,7 @@ describe("Task attachments", () => {
     const upload = await request(app)
       .post(`/api/v1/projects/${project.id}/tasks/${task.id}/attachments`)
       .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken)
       .attach("file", fileContents, {
         filename: "notes.txt",
         contentType: "text/plain",
@@ -434,6 +451,7 @@ describe("Task attachments", () => {
     const upload = await request(app)
       .post(`/api/v1/projects/${project.id}/tasks/${task.id}/attachments`)
       .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken)
       .attach("file", fileContents, {
         filename: "notes.txt",
         contentType: "text/plain",
@@ -452,7 +470,8 @@ describe("Task attachments", () => {
       .delete(
         `/api/v1/projects/${project.id}/tasks/${task.id}/attachments/${attachmentId}`,
       )
-      .set("Cookie", owner.accessCookie);
+      .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken);
 
     expect(response.status).toBe(200);
     expect(response.body.data).toEqual({ id: attachmentId });
@@ -480,6 +499,7 @@ describe("Task attachments", () => {
     const upload = await request(app)
       .post(`/api/v1/projects/${project.id}/tasks/${task.id}/attachments`)
       .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken)
       .attach("file", fileContents, {
         filename: "notes.txt",
         contentType: "text/plain",
@@ -513,6 +533,7 @@ describe("Task attachments", () => {
     const upload = await request(app)
       .post(`/api/v1/projects/${project.id}/tasks/${task.id}/attachments`)
       .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken)
       .attach("file", fileContents, {
         filename: "notes.txt",
         contentType: "text/plain",
@@ -561,6 +582,7 @@ describe("Task attachments", () => {
     const upload = await request(app)
       .post(`/api/v1/projects/${project.id}/tasks/${task.id}/attachments`)
       .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken)
       .attach("file", fileContents, {
         filename: "notes.txt",
         contentType: "text/plain",
@@ -574,7 +596,8 @@ describe("Task attachments", () => {
       .delete(
         `/api/v1/projects/${project.id}/tasks/${task.id}/attachments/${attachmentId}`,
       )
-      .set("Cookie", member.accessCookie);
+      .set("Cookie", member.accessCookie)
+      .set("X-CSRF-Token", member.csrfToken);
 
     expect(response.status).toBe(403);
     expect(response.body.error.code).toBe("FORBIDDEN");
@@ -612,6 +635,7 @@ describe("Task attachments", () => {
     const response = await request(app)
       .post(`/api/v1/projects/${project.id}/tasks/${task.id}/attachments`)
       .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken)
       .attach("file", oversizedFile, {
         filename: "large.txt",
         contentType: "text/plain",

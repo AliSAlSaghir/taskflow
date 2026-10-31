@@ -129,6 +129,14 @@ async function createLoggedInUser() {
   const accessCookie = getCookiePair(headers, "access_token");
   expect(accessCookie).toBeDefined();
 
+  const csrfResponse = await request(app)
+    .get("/api/v1/auth/csrf-token")
+    .set("Cookie", accessCookie!);
+
+  expect(csrfResponse.status).toBe(200);
+
+  const csrfToken = csrfResponse.body.data.csrfToken as string;
+
   const user = await prisma.user.findUniqueOrThrow({
     where: { email },
     select: { id: true },
@@ -137,6 +145,7 @@ async function createLoggedInUser() {
   return {
     userId: user.id,
     accessCookie: accessCookie!,
+    csrfToken,
   };
 }
 
@@ -184,6 +193,7 @@ describe("POST /api/v1/projects/:projectId/tasks/:taskId/comments", () => {
     const response = await request(app)
       .post(`/api/v1/projects/${project.id}/tasks/${task.id}/comments`)
       .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken)
       .send({ body: "  First comment  " });
 
     expect(response.status).toBe(201);
@@ -229,6 +239,7 @@ describe("POST /api/v1/projects/:projectId/tasks/:taskId/comments", () => {
     const response = await request(app)
       .post(`/api/v1/projects/${project.id}/tasks/${task.id}/comments`)
       .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken)
       .send({ body: "   ", unexpectedField: true });
 
     expect(response.status).toBe(400);
@@ -408,6 +419,7 @@ describe("PATCH /api/v1/projects/:projectId/tasks/:taskId/comments/:commentId", 
         `/api/v1/projects/${project.id}/tasks/${task.id}/comments/${comment.id}`,
       )
       .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken)
       .send({ body: "Updated comment" });
 
     expect(response.status).toBe(200);
@@ -450,6 +462,7 @@ describe("PATCH /api/v1/projects/:projectId/tasks/:taskId/comments/:commentId", 
         `/api/v1/projects/${project.id}/tasks/${task.id}/comments/${comment.id}`,
       )
       .set("Cookie", member.accessCookie)
+      .set("X-CSRF-Token", member.csrfToken)
       .send({ body: "Unauthorized edit" });
 
     expect(response.status).toBe(403);
@@ -481,6 +494,7 @@ describe("PATCH /api/v1/projects/:projectId/tasks/:taskId/comments/:commentId", 
         `/api/v1/projects/${project.id}/tasks/${secondTask.id}/comments/${comment.id}`,
       )
       .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken)
       .send({ body: "Attempted edit" });
 
     expect(response.status).toBe(404);
@@ -506,7 +520,8 @@ describe("DELETE /api/v1/projects/:projectId/tasks/:taskId/comments/:commentId",
       .delete(
         `/api/v1/projects/${project.id}/tasks/${task.id}/comments/${comment.id}`,
       )
-      .set("Cookie", owner.accessCookie);
+      .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken);
 
     expect(response.status).toBe(200);
     expect(response.body.data).toMatchObject({
@@ -570,7 +585,8 @@ describe("DELETE /api/v1/projects/:projectId/tasks/:taskId/comments/:commentId",
       .delete(
         `/api/v1/projects/${project.id}/tasks/${task.id}/comments/${comment.id}`,
       )
-      .set("Cookie", member.accessCookie);
+      .set("Cookie", member.accessCookie)
+      .set("X-CSRF-Token", member.csrfToken);
 
     expect(response.status).toBe(403);
     expect(response.body.error.code).toBe("FORBIDDEN");
@@ -601,6 +617,7 @@ describe("DELETE /api/v1/projects/:projectId/tasks/:taskId/comments/:commentId",
         `/api/v1/projects/${project.id}/tasks/${task.id}/comments/${comment.id}`,
       )
       .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken)
       .send({ body: "Try editing it" });
 
     expect(response.status).toBe(404);
@@ -625,7 +642,8 @@ describe("DELETE /api/v1/projects/:projectId/tasks/:taskId/comments/:commentId",
       .delete(
         `/api/v1/projects/${project.id}/tasks/${task.id}/comments/${comment.id}`,
       )
-      .set("Cookie", owner.accessCookie);
+      .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken);
 
     expect(response.status).toBe(404);
     expect(response.body.error.code).toBe("NOT_FOUND");
@@ -663,6 +681,7 @@ describe("Comment access to archived resources", () => {
     const createResponse = await request(app)
       .post(`/api/v1/projects/${project.id}/tasks/${task.id}/comments`)
       .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken)
       .send({ body: "A new comment" });
 
     expect(createResponse.status).toBe(409);
@@ -698,6 +717,7 @@ describe("Comment access to archived resources", () => {
     const createResponse = await request(app)
       .post(`/api/v1/projects/${project.id}/tasks/${task.id}/comments`)
       .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken)
       .send({ body: "A new comment" });
 
     expect(createResponse.status).toBe(409);
@@ -728,6 +748,7 @@ describe("Comment access to archived resources", () => {
         `/api/v1/projects/${project.id}/tasks/${task.id}/comments/${comment.id}`,
       )
       .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken)
       .send({ body: "Attempted edit" });
 
     expect(response.status).toBe(409);
@@ -742,6 +763,7 @@ describe("Comment request validation", () => {
     const response = await request(app)
       .post("/api/v1/projects/not-a-uuid/tasks/not-a-uuid/comments")
       .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken)
       .send({ body: "Invalid route IDs" });
 
     expect(response.status).toBe(400);
@@ -788,7 +810,8 @@ describe("Comment deletion on archived resources", () => {
       .delete(
         `/api/v1/projects/${project.id}/tasks/${task.id}/comments/${comment.id}`,
       )
-      .set("Cookie", owner.accessCookie);
+      .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken);
 
     expect(response.status).toBe(409);
     expect(response.body.error.code).toBe("COMMENT_RESOURCE_ARCHIVED");
@@ -823,8 +846,8 @@ describe("Comment deletion on archived resources", () => {
       .delete(
         `/api/v1/projects/${project.id}/tasks/${task.id}/comments/${comment.id}`,
       )
-      .set("Cookie", owner.accessCookie);
-
+      .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken);
     expect(response.status).toBe(409);
     expect(response.body.error.code).toBe("COMMENT_RESOURCE_ARCHIVED");
 

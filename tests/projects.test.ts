@@ -95,6 +95,14 @@ async function createLoggedInUser() {
   const accessCookie = getCookiePair(headers, "access_token");
   expect(accessCookie).toBeDefined();
 
+  const csrfResponse = await request(app)
+    .get("/api/v1/auth/csrf-token")
+    .set("Cookie", accessCookie!);
+
+  expect(csrfResponse.status).toBe(200);
+
+  const csrfToken = csrfResponse.body.data.csrfToken as string;
+
   const user = await prisma.user.findUniqueOrThrow({
     where: { email },
     select: { id: true },
@@ -103,6 +111,7 @@ async function createLoggedInUser() {
   return {
     userId: user.id,
     accessCookie: accessCookie!,
+    csrfToken,
   };
 }
 
@@ -113,6 +122,7 @@ describe("POST /api/v1/projects", () => {
     const response = await request(app)
       .post("/api/v1/projects")
       .set("Cookie", user.accessCookie)
+      .set("X-CSRF-Token", user.csrfToken)
       .send({
         name: "My First Project",
         description: "A project for testing TaskFlow.",
@@ -149,6 +159,7 @@ describe("POST /api/v1/projects", () => {
     const response = await request(app)
       .post("/api/v1/projects")
       .set("Cookie", user.accessCookie)
+      .set("X-CSRF-Token", user.csrfToken)
       .send({
         name: "   ",
         description: "A project with an invalid name.",
@@ -164,6 +175,7 @@ describe("POST /api/v1/projects", () => {
     const response = await request(app)
       .post("/api/v1/projects")
       .set("Cookie", user.accessCookie)
+      .set("X-CSRF-Token", user.csrfToken)
       .send({
         name: "Ownership Test",
         ownerId: randomUUID(),
@@ -431,6 +443,7 @@ describe("PATCH /api/v1/projects/:projectId", () => {
     const response = await request(app)
       .patch(`/api/v1/projects/${project.id}`)
       .set("Cookie", user.accessCookie)
+      .set("X-CSRF-Token", user.csrfToken)
       .send({ name: "Updated Name" });
 
     expect(response.status).toBe(200);
@@ -456,6 +469,7 @@ describe("PATCH /api/v1/projects/:projectId", () => {
     const updateResponse = await request(app)
       .patch(`/api/v1/projects/${project.id}`)
       .set("Cookie", user.accessCookie)
+      .set("X-CSRF-Token", user.csrfToken)
       .send({ description: "Updated description." });
 
     expect(updateResponse.status).toBe(200);
@@ -464,6 +478,7 @@ describe("PATCH /api/v1/projects/:projectId", () => {
     const clearResponse = await request(app)
       .patch(`/api/v1/projects/${project.id}`)
       .set("Cookie", user.accessCookie)
+      .set("X-CSRF-Token", user.csrfToken)
       .send({ description: null });
 
     expect(clearResponse.status).toBe(200);
@@ -483,6 +498,7 @@ describe("PATCH /api/v1/projects/:projectId", () => {
     const emptyResponse = await request(app)
       .patch(`/api/v1/projects/${project.id}`)
       .set("Cookie", user.accessCookie)
+      .set("X-CSRF-Token", user.csrfToken)
       .send({});
 
     expect(emptyResponse.status).toBe(400);
@@ -491,6 +507,7 @@ describe("PATCH /api/v1/projects/:projectId", () => {
     const unsupportedResponse = await request(app)
       .patch(`/api/v1/projects/${project.id}`)
       .set("Cookie", user.accessCookie)
+      .set("X-CSRF-Token", user.csrfToken)
       .send({ ownerId: randomUUID() });
 
     expect(unsupportedResponse.status).toBe(400);
@@ -522,6 +539,7 @@ describe("PATCH /api/v1/projects/:projectId", () => {
       const response = await request(app)
         .patch(`/api/v1/projects/${project.id}`)
         .set("Cookie", user.accessCookie)
+        .set("X-CSRF-Token", user.csrfToken)
         .send(body);
 
       expect(response.status).toBe(400);
@@ -543,6 +561,7 @@ describe("PATCH /api/v1/projects/:projectId", () => {
     const response = await request(app)
       .patch(`/api/v1/projects/${project.id}`)
       .set("Cookie", anotherUser.accessCookie)
+      .set("X-CSRF-Token", anotherUser.csrfToken)
       .send({ name: "Unauthorized Change" });
 
     expect(response.status).toBe(404);
@@ -561,6 +580,7 @@ describe("PATCH /api/v1/projects/:projectId", () => {
     const response = await request(app)
       .patch(`/api/v1/projects/${randomUUID()}`)
       .set("Cookie", user.accessCookie)
+      .set("X-CSRF-Token", user.csrfToken)
       .send({ name: "Missing Project" });
 
     expect(response.status).toBe(404);
@@ -573,6 +593,7 @@ describe("PATCH /api/v1/projects/:projectId", () => {
     const response = await request(app)
       .patch("/api/v1/projects/not-a-uuid")
       .set("Cookie", user.accessCookie)
+      .set("X-CSRF-Token", user.csrfToken)
       .send({ name: "Updated Name" });
 
     expect(response.status).toBe(400);
@@ -593,6 +614,7 @@ describe("PATCH /api/v1/projects/:projectId", () => {
     const response = await request(app)
       .patch(`/api/v1/projects/${project.id}`)
       .set("Cookie", user.accessCookie)
+      .set("X-CSRF-Token", user.csrfToken)
       .send({ name: "Should Not Change" });
 
     expect(response.status).toBe(404);
@@ -617,17 +639,23 @@ describe("PATCH /api/v1/projects/:projectId", () => {
 
 describe("DELETE /api/v1/projects/:projectId", () => {
   it("archives a project without deleting it", async () => {
-    const { accessCookie: cookie, userId } = await createLoggedInUser();
+    const {
+      accessCookie: cookie,
+      csrfToken,
+      userId,
+    } = await createLoggedInUser();
     const createResponse = await request(app)
       .post("/api/v1/projects")
       .set("Cookie", cookie)
+      .set("X-CSRF-Token", csrfToken)
       .send({ name: "Project to archive" });
 
     const projectId = createResponse.body.data.id as string;
 
     const response = await request(app)
       .delete(`/api/v1/projects/${projectId}`)
-      .set("Cookie", cookie);
+      .set("Cookie", cookie)
+      .set("X-CSRF-Token", csrfToken);
 
     expect(response.status).toBe(200);
     expect(response.body.data.id).toBe(projectId);
@@ -642,24 +670,26 @@ describe("DELETE /api/v1/projects/:projectId", () => {
   });
 
   it("returns 200 when archiving an already archived project", async () => {
-    const { accessCookie: cookie } = await createLoggedInUser();
+    const { accessCookie: cookie, csrfToken } = await createLoggedInUser();
     const createResponse = await request(app)
       .post("/api/v1/projects")
       .set("Cookie", cookie)
+      .set("X-CSRF-Token", csrfToken)
       .send({ name: "Already archived" });
 
     const projectId = createResponse.body.data.id as string;
 
     const firstResponse = await request(app)
       .delete(`/api/v1/projects/${projectId}`)
-      .set("Cookie", cookie);
+      .set("Cookie", cookie)
+      .set("X-CSRF-Token", csrfToken);
 
     const firstArchivedAt = firstResponse.body.data.archivedAt;
 
     const secondResponse = await request(app)
       .delete(`/api/v1/projects/${projectId}`)
-      .set("Cookie", cookie);
-
+      .set("Cookie", cookie)
+      .set("X-CSRF-Token", csrfToken);
     expect(secondResponse.status).toBe(200);
     expect(secondResponse.body.data.archivedAt).toBe(firstArchivedAt);
   });
@@ -671,13 +701,15 @@ describe("DELETE /api/v1/projects/:projectId", () => {
     const createResponse = await request(app)
       .post("/api/v1/projects")
       .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken)
       .send({ name: "Owner's project" });
 
     const projectId = createResponse.body.data.id as string;
 
     const response = await request(app)
       .delete(`/api/v1/projects/${projectId}`)
-      .set("Cookie", otherUser.accessCookie);
+      .set("Cookie", otherUser.accessCookie)
+      .set("X-CSRF-Token", otherUser.csrfToken);
 
     expect(response.status).toBe(404);
 
@@ -689,11 +721,12 @@ describe("DELETE /api/v1/projects/:projectId", () => {
   });
 
   it("returns 400 for an invalid project ID", async () => {
-    const { accessCookie: cookie } = await createLoggedInUser();
+    const { accessCookie: cookie, csrfToken } = await createLoggedInUser();
 
     const response = await request(app)
       .delete("/api/v1/projects/not-a-uuid")
-      .set("Cookie", cookie);
+      .set("Cookie", cookie)
+      .set("X-CSRF-Token", csrfToken);
 
     expect(response.status).toBe(400);
   });
@@ -709,21 +742,24 @@ describe("DELETE /api/v1/projects/:projectId", () => {
 
 describe("POST /api/v1/projects/:projectId/unarchive", () => {
   it("restores an archived project", async () => {
-    const { accessCookie: cookie } = await createLoggedInUser();
+    const { accessCookie: cookie, csrfToken } = await createLoggedInUser();
     const createResponse = await request(app)
       .post("/api/v1/projects")
       .set("Cookie", cookie)
+      .set("X-CSRF-Token", csrfToken)
       .send({ name: "Project to restore" });
 
     const projectId = createResponse.body.data.id as string;
 
     await request(app)
       .delete(`/api/v1/projects/${projectId}`)
-      .set("Cookie", cookie);
+      .set("Cookie", cookie)
+      .set("X-CSRF-Token", csrfToken);
 
     const response = await request(app)
       .post(`/api/v1/projects/${projectId}/unarchive`)
-      .set("Cookie", cookie);
+      .set("Cookie", cookie)
+      .set("X-CSRF-Token", csrfToken);
 
     expect(response.status).toBe(200);
     expect(response.body.data.id).toBe(projectId);
@@ -731,17 +767,19 @@ describe("POST /api/v1/projects/:projectId/unarchive", () => {
   });
 
   it("returns 200 when restoring a project that is already active", async () => {
-    const { accessCookie: cookie } = await createLoggedInUser();
+    const { accessCookie: cookie, csrfToken } = await createLoggedInUser();
     const createResponse = await request(app)
       .post("/api/v1/projects")
       .set("Cookie", cookie)
+      .set("X-CSRF-Token", csrfToken)
       .send({ name: "Already active" });
 
     const projectId = createResponse.body.data.id as string;
 
     const response = await request(app)
       .post(`/api/v1/projects/${projectId}/unarchive`)
-      .set("Cookie", cookie);
+      .set("Cookie", cookie)
+      .set("X-CSRF-Token", csrfToken);
 
     expect(response.status).toBe(200);
     expect(response.body.data.archivedAt).toBeNull();
@@ -754,17 +792,20 @@ describe("POST /api/v1/projects/:projectId/unarchive", () => {
     const createResponse = await request(app)
       .post("/api/v1/projects")
       .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken)
       .send({ name: "Private archived project" });
 
     const projectId = createResponse.body.data.id as string;
 
     await request(app)
       .delete(`/api/v1/projects/${projectId}`)
-      .set("Cookie", owner.accessCookie);
+      .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken);
 
     const response = await request(app)
       .post(`/api/v1/projects/${projectId}/unarchive`)
-      .set("Cookie", otherUser.accessCookie);
+      .set("Cookie", otherUser.accessCookie)
+      .set("X-CSRF-Token", otherUser.csrfToken);
 
     expect(response.status).toBe(404);
 
@@ -776,11 +817,12 @@ describe("POST /api/v1/projects/:projectId/unarchive", () => {
   });
 
   it("returns 400 for an invalid project ID", async () => {
-    const { accessCookie: cookie } = await createLoggedInUser();
+    const { accessCookie: cookie, csrfToken } = await createLoggedInUser();
 
     const response = await request(app)
       .post("/api/v1/projects/not-a-uuid/unarchive")
-      .set("Cookie", cookie);
+      .set("Cookie", cookie)
+      .set("X-CSRF-Token", csrfToken);
 
     expect(response.status).toBe(400);
   });

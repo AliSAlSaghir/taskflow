@@ -8,21 +8,28 @@ import {
   uploadProfilePictureController,
 } from "./profile.controller.js";
 import { updateProfile } from "./profile.controller.js";
+import { requireCsrfToken } from "../../app/middleware/require-csrf-token.js";
 
 const profileRouter = Router();
 
-profileRouter.patch("/", requireAuth, updateProfile);
+profileRouter.patch("/", requireAuth, requireCsrfToken, updateProfile);
 
 profileRouter.put(
   "/picture",
   requireAuth,
+  requireCsrfToken,
   profilePictureUpload.single("file"),
   uploadProfilePictureController,
 );
 
 profileRouter.get("/:userId/picture", requireAuth, getProfilePictureController);
 
-profileRouter.delete("/picture", requireAuth, deleteProfilePictureController);
+profileRouter.delete(
+  "/picture",
+  requireAuth,
+  requireCsrfToken,
+  deleteProfilePictureController,
+);
 
 profileRouter.use(handleProfilePictureUploadError);
 
