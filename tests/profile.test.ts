@@ -3,6 +3,7 @@ import request from "supertest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { app } from "../src/app/app.js";
 import { prisma } from "../src/infrastructure/database/prisma.js";
+import sharp from "sharp";
 
 const storageMocks = vi.hoisted(() => ({
   uploadObject: vi.fn(),
@@ -14,13 +15,95 @@ vi.mock("../src/infrastructure/storage.js", () => storageMocks);
 
 const emailsToClean: string[] = [];
 
-beforeEach(() => {
+async function createTestImage() {
+  return sharp({
+    create: {
+      width: 100,
+      height: 100,
+      channels: 3,
+      background: { r: 100, g: 150, b: 200 },
+    },
+  })
+    .jpeg()
+    .toBuffer();
+}
+
+async function createTestWebpImage() {
+  return sharp({
+    create: {
+      width: 100,
+      height: 100,
+      channels: 3,
+      background: { r: 100, g: 150, b: 200 },
+    },
+  })
+    .webp()
+    .toBuffer();
+}
+
+async function createAnimatedWebpImage() {
+  const redFrame = await sharp({
+    create: {
+      width: 100,
+      height: 100,
+      channels: 4,
+      background: { r: 255, g: 0, b: 0, alpha: 1 },
+    },
+  })
+    .png()
+    .toBuffer();
+
+  const blueFrame = await sharp({
+    create: {
+      width: 100,
+      height: 100,
+      channels: 4,
+      background: { r: 0, g: 0, b: 255, alpha: 1 },
+    },
+  })
+    .png()
+    .toBuffer();
+
+  return sharp([redFrame, blueFrame], {
+    join: { animated: true },
+  })
+    .webp({ delay: [100, 100], loop: 0 })
+    .toBuffer();
+}
+
+async function createOversizedPixelImage() {
+  return sharp({
+    create: {
+      width: 4096,
+      height: 4096,
+      channels: 3,
+      background: { r: 100, g: 150, b: 200 },
+    },
+  })
+    .png()
+    .toBuffer();
+}
+
+async function createOversizedDimensionImage() {
+  return sharp({
+    create: {
+      width: 4097,
+      height: 1,
+      channels: 3,
+      background: { r: 100, g: 150, b: 200 },
+    },
+  })
+    .png()
+    .toBuffer();
+}
+
+beforeEach(async () => {
   vi.clearAllMocks();
 
   storageMocks.uploadObject.mockResolvedValue(undefined);
   storageMocks.downloadObject.mockResolvedValue({
-    body: Buffer.from([0xff, 0xd8, 0xff, 0xd9]),
-    contentType: "image/jpeg",
+    body: await createTestWebpImage(),
+    contentType: "image/webp",
   });
   storageMocks.deleteObject.mockResolvedValue(undefined);
 });
@@ -234,7 +317,7 @@ describe("PATCH /api/v1/profile", () => {
     it("uploads a valid JPEG profile picture", async () => {
       const user = await createLoggedInUser();
 
-      const image = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
+      const image = await createTestImage();
 
       const response = await request(app)
         .put("/api/v1/profile/picture")
@@ -254,7 +337,7 @@ describe("PATCH /api/v1/profile", () => {
       expect(storageMocks.uploadObject).toHaveBeenCalledWith(
         expect.stringMatching(/^profile-pictures\//),
         expect.any(Buffer),
-        "image/jpeg",
+        "image/webp",
       );
 
       const profile = await prisma.profile.findUniqueOrThrow({
@@ -334,8 +417,8 @@ describe("PATCH /api/v1/profile", () => {
   it("replaces an existing picture and deletes the old one", async () => {
     const user = await createLoggedInUser();
 
-    const firstImage = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
-    const secondImage = Buffer.from([0xff, 0xd8, 0xff, 0xd9, 0x01]);
+    const firstImage = await createTestImage();
+    const secondImage = await createTestImage();
 
     const firstUpload = await request(app)
       .put("/api/v1/profile/picture")
@@ -376,7 +459,7 @@ describe("PATCH /api/v1/profile", () => {
   it("preserves the existing picture when uploading a replacement fails", async () => {
     const user = await createLoggedInUser();
 
-    const image = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
+    const image = await createTestImage();
 
     const firstUpload = await request(app)
       .put("/api/v1/profile/picture")
@@ -414,6 +497,128 @@ describe("PATCH /api/v1/profile", () => {
     expect(profile.profilePictureKey).toBe(oldKey);
     expect(storageMocks.deleteObject).not.toHaveBeenCalled();
   });
+  it("rejects profile picture uploads without a CSRF token", async () => {
+    const user = await createLoggedInUser();
+
+    const response = await request(app)
+      .put("/api/v1/profile/picture")
+      .set("Cookie", user.accessCookie)
+      .attach("file", await createTestImage(), {
+        filename: "profile.jpg",
+        contentType: "image/webp",
+      });
+
+    expect(response.status).toBe(403);
+    expect(response.body.error.code).toBe("INVALID_CSRF_TOKEN");
+    expect(storageMocks.uploadObject).not.toHaveBeenCalled();
+  });
+  it("rejects corrupted images even when they have a JPEG signature", async () => {
+    const user = await createLoggedInUser();
+
+    const corruptedImage = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
+
+    const response = await request(app)
+      .put("/api/v1/profile/picture")
+      .set("Cookie", user.accessCookie)
+      .set("X-CSRF-Token", user.csrfToken)
+      .attach("file", corruptedImage, {
+        filename: "corrupted.jpg",
+        contentType: "image/jpeg",
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe("VALIDATION_ERROR");
+    expect(storageMocks.uploadObject).not.toHaveBeenCalled();
+  });
+  it("creates an animated WebP test image", async () => {
+    const image = await createAnimatedWebpImage();
+    const metadata = await sharp(image, { animated: true }).metadata();
+
+    expect(metadata.format).toBe("webp");
+    expect(metadata.pages).toBe(2);
+  });
+  it("rejects animated WebP images", async () => {
+    const user = await createLoggedInUser();
+    const image = await createAnimatedWebpImage();
+
+    const response = await request(app)
+      .put("/api/v1/profile/picture")
+      .set("Cookie", user.accessCookie)
+      .set("X-CSRF-Token", user.csrfToken)
+      .attach("file", image, {
+        filename: "animated.webp",
+        contentType: "image/webp",
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.details).toContainEqual({
+      field: "file",
+      message: "Animated images are not supported.",
+    });
+    expect(storageMocks.uploadObject).not.toHaveBeenCalled();
+  });
+  it("rejects images exceeding the maximum pixel count", async () => {
+    const user = await createLoggedInUser();
+    const image = await createOversizedPixelImage();
+
+    const response = await request(app)
+      .put("/api/v1/profile/picture")
+      .set("Cookie", user.accessCookie)
+      .set("X-CSRF-Token", user.csrfToken)
+      .attach("file", image, {
+        filename: "oversized.png",
+        contentType: "image/png",
+      });
+
+    expect(response.status).toBe(400);
+
+    expect(response.body.error.details).toContainEqual({
+      field: "file",
+      message: "The image dimensions are too large.",
+    });
+
+    expect(storageMocks.uploadObject).not.toHaveBeenCalled();
+  });
+  it("rejects images whose actual format does not match the declared MIME type", async () => {
+    const user = await createLoggedInUser();
+    const image = await createTestImage();
+
+    const response = await request(app)
+      .put("/api/v1/profile/picture")
+      .set("Cookie", user.accessCookie)
+      .set("X-CSRF-Token", user.csrfToken)
+      .attach("file", image, {
+        filename: "profile.webp",
+        contentType: "image/webp",
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.details).toContainEqual({
+      field: "file",
+      message: "The image contents do not match the declared file type.",
+    });
+    expect(storageMocks.uploadObject).not.toHaveBeenCalled();
+  });
+  it("rejects images exceeding the maximum width or height", async () => {
+    const user = await createLoggedInUser();
+    const image = await createOversizedDimensionImage();
+
+    const response = await request(app)
+      .put("/api/v1/profile/picture")
+      .set("Cookie", user.accessCookie)
+      .set("X-CSRF-Token", user.csrfToken)
+      .attach("file", image, {
+        filename: "oversized.png",
+        contentType: "image/png",
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.details).toContainEqual({
+      field: "file",
+      message: "The image dimensions are too large.",
+    });
+    expect(storageMocks.uploadObject).not.toHaveBeenCalled();
+  });
 });
 
 describe("GET /api/v1/profile/:userId/picture", () => {
@@ -421,7 +626,7 @@ describe("GET /api/v1/profile/:userId/picture", () => {
     const owner = await createLoggedInUser();
     const viewer = await createLoggedInUser();
 
-    const image = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
+    const image = await createTestImage();
 
     const uploadResponse = await request(app)
       .put("/api/v1/profile/picture")
@@ -439,9 +644,9 @@ describe("GET /api/v1/profile/:userId/picture", () => {
       .set("Cookie", viewer.accessCookie);
 
     expect(response.status).toBe(200);
-    expect(response.headers["content-type"]).toMatch(/image\/jpeg/);
+    expect(response.headers["content-type"]).toMatch(/image\/webp/);
     expect(response.headers["cache-control"]).toBe("private, no-store");
-    expect(response.body).toEqual(image);
+    expect(response.body).toEqual(await createTestWebpImage());
 
     expect(storageMocks.downloadObject).toHaveBeenCalledOnce();
   });
@@ -483,7 +688,7 @@ describe("GET /api/v1/profile/:userId/picture", () => {
   it("returns a storage error when downloading the picture fails", async () => {
     const user = await createLoggedInUser();
 
-    const image = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
+    const image = await createTestImage();
 
     const uploadResponse = await request(app)
       .put("/api/v1/profile/picture")
@@ -513,7 +718,7 @@ describe("DELETE /api/v1/profile/picture", () => {
   it("deletes the authenticated user's profile picture", async () => {
     const user = await createLoggedInUser();
 
-    const image = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
+    const image = await createTestImage();
 
     const uploadResponse = await request(app)
       .put("/api/v1/profile/picture")
@@ -548,7 +753,7 @@ describe("DELETE /api/v1/profile/picture", () => {
   it("succeeds when deleting the stored image fails", async () => {
     const user = await createLoggedInUser();
 
-    const image = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
+    const image = await createTestImage();
 
     const uploadResponse = await request(app)
       .put("/api/v1/profile/picture")
@@ -601,5 +806,16 @@ describe("DELETE /api/v1/profile/picture", () => {
 
     expect(response.status).toBe(401);
     expect(response.body.error.code).toBe("UNAUTHENTICATED");
+  });
+  it("rejects profile picture deletion without a CSRF token", async () => {
+    const user = await createLoggedInUser();
+
+    const response = await request(app)
+      .delete("/api/v1/profile/picture")
+      .set("Cookie", user.accessCookie);
+
+    expect(response.status).toBe(403);
+    expect(response.body.error.code).toBe("INVALID_CSRF_TOKEN");
+    expect(storageMocks.deleteObject).not.toHaveBeenCalled();
   });
 });

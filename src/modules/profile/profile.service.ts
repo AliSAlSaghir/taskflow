@@ -12,6 +12,7 @@ import {
   ProfileValidationError,
 } from "./profile.errors.js";
 import type { UpdateProfileInput } from "./profile.schema.js";
+import sharp from "sharp";
 
 const MAX_FILE_SIZE = 2 * 1024 * 1024;
 
@@ -66,7 +67,12 @@ export async function updateProfileService(
   });
 }
 
-function validatePicture(file: UploadedPicture) {
+const MAX_IMAGE_WIDTH = 4096;
+const MAX_IMAGE_HEIGHT = 4096;
+const MAX_IMAGE_PIXELS = 16_000_000;
+const MAX_PROCESSED_FILE_SIZE = 1 * 1024 * 1024;
+
+async function processPicture(file: UploadedPicture): Promise<Buffer> {
   if (file.size <= 0) {
     throw new ProfileValidationError("The uploaded image is empty.");
   }
@@ -81,40 +87,66 @@ function validatePicture(file: UploadedPicture) {
     );
   }
 
-  if (!matchesDeclaredContentType(file.buffer, file.mimetype)) {
+  try {
+    const image = sharp(file.buffer, {
+      limitInputPixels: MAX_IMAGE_WIDTH * MAX_IMAGE_HEIGHT,
+      failOn: "error",
+    });
+
+    const metadata = await image.metadata();
+
+    if (
+      !metadata.width ||
+      !metadata.height ||
+      metadata.width > MAX_IMAGE_WIDTH ||
+      metadata.height > MAX_IMAGE_HEIGHT ||
+      metadata.width * metadata.height > MAX_IMAGE_PIXELS
+    ) {
+      throw new ProfileValidationError("The image dimensions are too large.");
+    }
+
+    if ((metadata.pages ?? 1) > 1) {
+      throw new ProfileValidationError("Animated images are not supported.");
+    }
+
+    const expectedFormat = (
+      {
+        "image/jpeg": "jpeg",
+        "image/png": "png",
+        "image/webp": "webp",
+      } as const
+    )[file.mimetype];
+
+    if (metadata.format !== expectedFormat) {
+      throw new ProfileValidationError(
+        "The image contents do not match the declared file type.",
+      );
+    }
+
+    const processedBuffer = await image
+      .rotate()
+      .resize({
+        width: 1024,
+        height: 1024,
+        fit: "inside",
+        withoutEnlargement: true,
+      })
+      .webp({ quality: 80 })
+      .toBuffer();
+
+    if (processedBuffer.length > MAX_PROCESSED_FILE_SIZE) {
+      throw new ProfileValidationError("The processed image is too large.");
+    }
+
+    return processedBuffer;
+  } catch (error: unknown) {
+    if (error instanceof ProfileValidationError) {
+      throw error;
+    }
+
     throw new ProfileValidationError(
-      "The image contents do not match the declared file type.",
+      "The uploaded image is invalid or corrupted.",
     );
-  }
-}
-
-function matchesDeclaredContentType(
-  buffer: Buffer,
-  contentType: string,
-): boolean {
-  switch (contentType) {
-    case "image/jpeg":
-      return (
-        buffer.length >= 3 &&
-        buffer[0] === 0xff &&
-        buffer[1] === 0xd8 &&
-        buffer[2] === 0xff
-      );
-
-    case "image/png":
-      return buffer
-        .subarray(0, 8)
-        .equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
-
-    case "image/webp":
-      return (
-        buffer.length >= 12 &&
-        buffer.toString("ascii", 0, 4) === "RIFF" &&
-        buffer.toString("ascii", 8, 12) === "WEBP"
-      );
-
-    default:
-      return false;
   }
 }
 
@@ -122,7 +154,7 @@ export async function uploadProfilePicture(
   userId: string,
   file: UploadedPicture,
 ) {
-  validatePicture(file);
+  const processedBuffer = await processPicture(file);
 
   const profile = await prisma.profile.findUnique({
     where: { userId },
@@ -136,7 +168,7 @@ export async function uploadProfilePicture(
   const newKey = `profile-pictures/${randomUUID()}`;
 
   await runStorageOperation(() =>
-    uploadObject(newKey, file.buffer, file.mimetype),
+    uploadObject(newKey, processedBuffer, "image/webp"),
   );
 
   try {
