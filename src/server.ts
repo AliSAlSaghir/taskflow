@@ -1,6 +1,7 @@
 import { env } from "./config/env.js";
 import { app } from "./app/app.js";
 import { prisma } from "./infrastructure/database/prisma.js";
+import { logger } from "./app/logger.js";
 
 const server = app.listen(env.PORT, () => {
   console.log(`TaskFlow API listening on port ${env.PORT}`);
@@ -33,7 +34,9 @@ function shutdown(signal: NodeJS.Signals) {
       let exitCode = 0;
 
       if (serverError) {
-        console.error("HTTP server shutdown failed:", serverError);
+        logger.error("HTTP server shutdown failed", {
+          error: serverError,
+        });
         exitCode = 1;
       }
 
@@ -41,7 +44,9 @@ function shutdown(signal: NodeJS.Signals) {
         await prisma.$disconnect();
         console.log("Database disconnected.");
       } catch (error: unknown) {
-        console.error("Database disconnection failed:", error);
+        logger.error("Database disconnection failed", {
+          error,
+        });
         exitCode = 1;
       } finally {
         clearTimeout(forceShutdown);

@@ -11,8 +11,12 @@ import { env } from "../config/env.js";
 import { profileRouter } from "../modules/profile/profile.routes.js";
 import { adminRouter } from "../modules/admin/admin.routes.js";
 import { requireTrustedOrigin } from "./middleware/require-trusted-origin.js";
+import { requestIdMiddleware } from "./middleware/request-id.js";
+import { logger } from "./logger.js";
 
 const app = express();
+
+app.use(requestIdMiddleware);
 
 app.set("trust proxy", 2);
 
@@ -45,7 +49,7 @@ app.get("/health", (_req, res) => {
   });
 });
 
-app.get("/health/ready", async (_req, res) => {
+app.get("/health/ready", async (req, res) => {
   try {
     await prisma.$queryRaw`SELECT 1`;
 
@@ -54,7 +58,14 @@ app.get("/health/ready", async (_req, res) => {
       database: "connected",
     });
   } catch (error) {
-    console.error("Database readiness check failed:", error);
+    logger.error("Database readiness check failed", {
+      ...(res.locals.requestId
+        ? { requestId: res.locals.requestId as string }
+        : {}),
+      method: req.method,
+      path: req.path,
+      error,
+    });
 
     res.status(503).json({
       status: "not_ready",

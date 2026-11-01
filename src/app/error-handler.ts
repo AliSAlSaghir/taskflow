@@ -1,6 +1,12 @@
 import type { ErrorRequestHandler } from "express";
+import { logger } from "./logger.js";
 
-export const errorHandler: ErrorRequestHandler = (error, req, res, _next) => {
+export const errorHandler: ErrorRequestHandler = (error, req, res, next) => {
+  if (res.headersSent) {
+    next(error);
+    return;
+  }
+
   if (
     typeof error === "object" &&
     error !== null &&
@@ -16,7 +22,10 @@ export const errorHandler: ErrorRequestHandler = (error, req, res, _next) => {
     return;
   }
 
-  console.error("Unhandled request error:", {
+  const requestId = res.locals.requestId as string | undefined;
+
+  logger.error("Unhandled request error", {
+    ...(requestId ? { requestId } : {}),
     method: req.method,
     path: req.path,
     error,
@@ -26,6 +35,7 @@ export const errorHandler: ErrorRequestHandler = (error, req, res, _next) => {
     error: {
       code: "INTERNAL_SERVER_ERROR",
       message: "An unexpected error occurred.",
+      ...(requestId ? { requestId } : {}),
     },
   });
 };

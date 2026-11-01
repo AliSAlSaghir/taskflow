@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { z } from "zod";
+import { logger } from "../app/logger.js";
 
 const envSchema = z
   .object({
@@ -81,11 +82,12 @@ const envSchema = z
 const result = envSchema.safeParse(process.env);
 
 if (!result.success) {
-  console.error("Invalid environment configuration:");
-  console.error(z.treeifyError(result.error));
+  logger.error("Invalid environment configuration", {
+    validationErrors: z.treeifyError(result.error),
+  });
+
   throw new Error("Environment configuration validation failed");
 }
-
 const config = result.data;
 
 export const env = {

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { app } from "../src/app/app.js";
 import express from "express";
 import { errorHandler } from "../src/app/error-handler.js";
+import { requestIdMiddleware } from "../src/app/middleware/request-id.js";
 
 describe("GET /health", () => {
   it("returns HTTP 200 and a healthy status", async () => {
@@ -48,8 +49,10 @@ it("returns a consistent 404 for an unknown route", async () => {
   });
 });
 
-it("returns a generic 500 without exposing unexpected error details", async () => {
+it("returns a generic 500 and logs the request ID without exposing error details", async () => {
   const testApp = express();
+
+  testApp.use(requestIdMiddleware);
 
   testApp.get("/test-unexpected-error", (_req, _res, next) => {
     next(new Error("Sensitive internal database details"));
@@ -62,13 +65,30 @@ it("returns a generic 500 without exposing unexpected error details", async () =
   try {
     const response = await request(testApp).get("/test-unexpected-error");
 
+    const requestId = response.headers["x-request-id"];
+    const loggedOutput = consoleError.mock.calls
+      .map(([message]) => String(message))
+      .join("\n");
+
     expect(response.status).toBe(500);
+
+    expect(requestId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+    );
+
     expect(response.body).toEqual({
       error: {
         code: "INTERNAL_SERVER_ERROR",
         message: "An unexpected error occurred.",
+        requestId,
       },
     });
+
+    expect(loggedOutput).toContain(requestId);
+    expect(loggedOutput).toContain('"level":"error"');
+    expect(loggedOutput).toContain('"errorName":"Error"');
+
+    expect(loggedOutput).not.toContain("Sensitive internal database details");
 
     expect(JSON.stringify(response.body)).not.toContain(
       "Sensitive internal database details",
