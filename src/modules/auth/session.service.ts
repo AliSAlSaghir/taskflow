@@ -21,24 +21,46 @@ export async function createAuthSession(userId: string) {
 
   const refreshToken = createRefreshToken();
 
-  const session = await prisma.authSession.create({
-    data: {
-      userId,
-      expiresAt: sessionExpiresAt,
-      refreshTokens: {
-        create: {
-          tokenHash: hashRefreshToken(refreshToken),
-          expiresAt: refreshTokenExpiresAt,
+  return prisma.$transaction(async (tx) => {
+    const users = await tx.$queryRaw<{ id: string }[]>`
+      SELECT id
+      FROM users
+      WHERE id = ${userId}::uuid
+      FOR UPDATE
+    `;
+
+    if (users.length === 0) {
+      return null;
+    }
+
+    const user = await tx.user.findUnique({
+      where: { id: userId },
+      select: { status: true },
+    });
+
+    if (!user || user.status !== "ACTIVE") {
+      return null;
+    }
+
+    const session = await tx.authSession.create({
+      data: {
+        userId,
+        expiresAt: sessionExpiresAt,
+        refreshTokens: {
+          create: {
+            tokenHash: hashRefreshToken(refreshToken),
+            expiresAt: refreshTokenExpiresAt,
+          },
         },
       },
-    },
-    select: { id: true },
-  });
+      select: { id: true },
+    });
 
-  return {
-    sessionId: session.id,
-    refreshToken,
-  };
+    return {
+      sessionId: session.id,
+      refreshToken,
+    };
+  });
 }
 
 type RefreshResult =

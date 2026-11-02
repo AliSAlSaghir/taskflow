@@ -301,3 +301,77 @@ export async function getAdminProject(projectId: string) {
     })),
   };
 }
+
+export async function deactivateAdminUser(userId: string) {
+  return prisma.$transaction(async (tx) => {
+    const users = await tx.$queryRaw<{ id: string }[]>`
+      SELECT id
+      FROM users
+      WHERE id = ${userId}::uuid
+      FOR UPDATE
+    `;
+
+    if (users.length === 0) {
+      return null;
+    }
+
+    const user = await tx.user.findUnique({
+      where: { id: userId },
+      select: { id: true, status: true },
+    });
+
+    if (!user) {
+      return null;
+    }
+
+    if (user.status === "DISABLED") {
+      return user;
+    }
+
+    const now = new Date();
+
+    await tx.user.update({
+      where: { id: userId },
+      data: { status: "DISABLED" },
+    });
+
+    await tx.authSession.updateMany({
+      where: {
+        userId,
+        revokedAt: null,
+      },
+      data: {
+        revokedAt: now,
+      },
+    });
+
+    await tx.refreshToken.updateMany({
+      where: {
+        session: { userId },
+        revokedAt: null,
+      },
+      data: {
+        revokedAt: now,
+      },
+    });
+
+    return {
+      id: user.id,
+      status: "DISABLED" as const,
+    };
+  });
+}
+
+export async function reactivateAdminUser(userId: string) {
+  await prisma.user.updateMany({
+    where: {
+      id: userId,
+      status: "DISABLED",
+    },
+    data: {
+      status: "ACTIVE",
+    },
+  });
+
+  return getAdminUser(userId);
+}

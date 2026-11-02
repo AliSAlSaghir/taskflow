@@ -10,6 +10,8 @@ import {
   listAdminUsers,
   getAdminProject,
   listAdminProjects,
+  deactivateAdminUser,
+  reactivateAdminUser,
 } from "./admin.service.js";
 
 export const listAdminUsersController: RequestHandler = async (
@@ -125,3 +127,87 @@ export async function getAdminProjectController(req: Request, res: Response) {
     },
   });
 }
+
+export const deactivateAdminUserController: RequestHandler = async (
+  req,
+  res,
+  next,
+) => {
+  const parsed = adminUserIdSchema.safeParse(req.params.userId);
+
+  if (!parsed.success) {
+    res.status(400).json({
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "Invalid user ID.",
+        details: parsed.error.issues,
+      },
+    });
+    return;
+  }
+
+  if (parsed.data === res.locals.user.id) {
+    res.status(400).json({
+      error: {
+        code: "CANNOT_DEACTIVATE_SELF",
+        message: "You cannot deactivate your own account.",
+      },
+    });
+    return;
+  }
+
+  try {
+    const user = await deactivateAdminUser(parsed.data);
+
+    if (!user) {
+      res.status(404).json({
+        error: {
+          code: "NOT_FOUND",
+          message: "User not found.",
+        },
+      });
+      return;
+    }
+
+    res.status(200).json({ data: { user } });
+  } catch (error: unknown) {
+    next(error);
+  }
+};
+
+export const reactivateAdminUserController: RequestHandler = async (
+  req,
+  res,
+  next,
+) => {
+  const parsed = adminUserIdSchema.safeParse(req.params.userId);
+
+  if (!parsed.success) {
+    res.status(400).json({
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "Invalid user ID.",
+        details: parsed.error.issues,
+      },
+    });
+    return;
+  }
+
+  try {
+    const user = await reactivateAdminUser(parsed.data);
+
+    if (!user) {
+      res.status(404).json({
+        error: {
+          code: "NOT_FOUND",
+          message: "User not found.",
+        },
+      });
+      return;
+    }
+
+    res.status(200).json({ data: { user } });
+  } catch (error: unknown) {
+    next(error);
+  }
+};

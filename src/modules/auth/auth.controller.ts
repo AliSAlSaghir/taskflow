@@ -84,7 +84,18 @@ export async function login(req: Request, res: Response, next: NextFunction) {
       });
     }
 
-    const { sessionId, refreshToken } = await createAuthSession(user.id);
+    const session = await createAuthSession(user.id);
+
+    if (!session) {
+      return res.status(401).json({
+        error: {
+          code: "INVALID_CREDENTIALS",
+          message: "Invalid email or password.",
+        },
+      });
+    }
+
+    const { sessionId, refreshToken } = session;
     const accessToken = await createAccessToken(user.id, sessionId);
 
     const cookieOptions = {
@@ -244,10 +255,7 @@ export async function logoutAll(
   }
 }
 
-export function getCsrfToken(
-  _req: Request,
-  res: Response,
-): void {
+export function getCsrfToken(_req: Request, res: Response): void {
   const sessionId = res.locals.user.sessionId;
 
   res.status(200).json({

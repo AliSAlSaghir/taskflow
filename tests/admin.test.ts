@@ -136,15 +136,29 @@ async function createLoggedInUser(prefix: string, admin = false) {
   const accessCookie = getCookiePair(headers, "access_token");
   expect(accessCookie).toBeDefined();
 
+  const csrfResponse = await request(app)
+    .get("/api/v1/auth/csrf-token")
+    .set("Cookie", accessCookie!);
+
+  expect(csrfResponse.status).toBe(200);
+
+  const csrfToken = csrfResponse.body.data.csrfToken as string;
+
   const user = await prisma.user.findUniqueOrThrow({
     where: { email },
     select: { id: true },
   });
 
+  const refreshCookie = getCookiePair(headers, "refresh_token");
+
+  expect(refreshCookie).toBeDefined();
+
   return {
     email,
     userId: user.id,
     accessCookie: accessCookie!,
+    rawRefreshToken: refreshCookie!.slice("refresh_token=".length),
+    csrfToken,
   };
 }
 
@@ -687,4 +701,296 @@ describe("Admin project inspection", () => {
     expect(response.status).toBe(403);
     expect(response.body.error.code).toBe("FORBIDDEN");
   });
+});
+
+it("deactivates a user and revokes all their sessions and refresh tokens", async () => {
+  const admin = await createLoggedInUser("deactivate-admin", true);
+  const target = await createLoggedInUser("deactivate-target");
+
+  // Create a second session for the target user.
+  const secondLogin = await request(app).post("/api/v1/auth/login").send({
+    email: target.email,
+    password: "A-Strong-Test-Password-123!",
+  });
+
+  expect(secondLogin.status).toBe(200);
+
+  const secondHeaders = Array.isArray(secondLogin.headers["set-cookie"])
+    ? secondLogin.headers["set-cookie"]
+    : [];
+
+  const secondAccessCookie = getCookiePair(secondHeaders, "access_token");
+  const secondRefreshCookie = getCookiePair(secondHeaders, "refresh_token");
+
+  expect(secondAccessCookie).toBeDefined();
+  expect(secondRefreshCookie).toBeDefined();
+
+  // Deactivate the target account.
+  const response = await request(app)
+    .patch(`/api/v1/admin/users/${target.userId}/deactivate`)
+    .set("Cookie", admin.accessCookie)
+    .set("X-CSRF-Token", admin.csrfToken);
+
+  expect(response.status).toBe(200);
+  expect(response.body.data.user).toEqual({
+    id: target.userId,
+    status: "DISABLED",
+  });
+
+  // Verify the account is disabled and every session/token is revoked.
+  const user = await prisma.user.findUniqueOrThrow({
+    where: { id: target.userId },
+    include: {
+      authSessions: {
+        include: { refreshTokens: true },
+      },
+    },
+  });
+
+  expect(user.status).toBe("DISABLED");
+  expect(user.authSessions).toHaveLength(2);
+
+  for (const session of user.authSessions) {
+    expect(session.revokedAt).not.toBeNull();
+    expect(session.refreshTokens.length).toBeGreaterThan(0);
+    expect(
+      session.refreshTokens.every((token) => token.revokedAt !== null),
+    ).toBe(true);
+  }
+
+  // Neither old access session should work.
+  const firstMeResponse = await request(app)
+    .get("/api/v1/auth/me")
+    .set("Cookie", target.accessCookie);
+
+  const secondMeResponse = await request(app)
+    .get("/api/v1/auth/me")
+    .set("Cookie", secondAccessCookie!);
+
+  expect(firstMeResponse.status).toBe(401);
+  expect(secondMeResponse.status).toBe(401);
+
+  // Neither old refresh token should work.
+  const firstRefreshResponse = await request(app)
+    .post("/api/v1/auth/refresh")
+    .set("Cookie", target.rawRefreshToken);
+
+  const secondRefreshResponse = await request(app)
+    .post("/api/v1/auth/refresh")
+    .set("Cookie", secondRefreshCookie!);
+
+  expect(firstRefreshResponse.status).toBe(401);
+  expect(secondRefreshResponse.status).toBe(401);
+});
+
+it("does not leave an active session when login races with account deactivation", async () => {
+  const admin = await createLoggedInUser("race-admin", true);
+  const target = await createLoggedInUser("race-target");
+
+  const [loginResponse, deactivateResponse] = await Promise.all([
+    request(app).post("/api/v1/auth/login").send({
+      email: target.email,
+      password: "A-Strong-Test-Password-123!",
+    }),
+    request(app)
+      .patch(`/api/v1/admin/users/${target.userId}/deactivate`)
+      .set("Cookie", admin.accessCookie)
+      .set("X-CSRF-Token", admin.csrfToken),
+  ]);
+
+  expect([200, 401]).toContain(loginResponse.status);
+  expect(deactivateResponse.status).toBe(200);
+
+  const user = await prisma.user.findUniqueOrThrow({
+    where: { id: target.userId },
+    include: {
+      authSessions: {
+        include: { refreshTokens: true },
+      },
+    },
+  });
+
+  expect(user.status).toBe("DISABLED");
+
+  for (const session of user.authSessions) {
+    expect(session.revokedAt).not.toBeNull();
+
+    for (const token of session.refreshTokens) {
+      expect(token.revokedAt).not.toBeNull();
+    }
+  }
+});
+
+it("reactivates a user without restoring their old sessions", async () => {
+  const admin = await createLoggedInUser("reactivate-admin", true);
+  const target = await createLoggedInUser("reactivate-target");
+
+  // First deactivate the target.
+  const deactivateResponse = await request(app)
+    .patch(`/api/v1/admin/users/${target.userId}/deactivate`)
+    .set("Cookie", admin.accessCookie)
+    .set("X-CSRF-Token", admin.csrfToken);
+
+  expect(deactivateResponse.status).toBe(200);
+
+  // Then reactivate the account.
+  const reactivateResponse = await request(app)
+    .patch(`/api/v1/admin/users/${target.userId}/reactivate`)
+    .set("Cookie", admin.accessCookie)
+    .set("X-CSRF-Token", admin.csrfToken);
+
+  expect(reactivateResponse.status).toBe(200);
+  expect(reactivateResponse.body.data.user.status).toBe("ACTIVE");
+
+  const user = await prisma.user.findUniqueOrThrow({
+    where: { id: target.userId },
+    include: {
+      authSessions: {
+        include: { refreshTokens: true },
+      },
+    },
+  });
+
+  expect(user.status).toBe("ACTIVE");
+  expect(user.authSessions).toHaveLength(1);
+  expect(user.authSessions[0].revokedAt).not.toBeNull();
+  expect(
+    user.authSessions[0].refreshTokens.every(
+      (token) => token.revokedAt !== null,
+    ),
+  ).toBe(true);
+
+  // Reactivation must not restore the old access or refresh token.
+  const oldMeResponse = await request(app)
+    .get("/api/v1/auth/me")
+    .set("Cookie", target.accessCookie);
+
+  const oldRefreshResponse = await request(app)
+    .post("/api/v1/auth/refresh")
+    .set("Cookie", target.rawRefreshToken);
+
+  expect(oldMeResponse.status).toBe(401);
+  expect(oldRefreshResponse.status).toBe(401);
+
+  // A fresh login should work.
+  const newLogin = await request(app).post("/api/v1/auth/login").send({
+    email: target.email,
+    password: "A-Strong-Test-Password-123!",
+  });
+
+  expect(newLogin.status).toBe(200);
+});
+
+it("prevents an administrator from deactivating their own account", async () => {
+  const admin = await createLoggedInUser("self-deactivate-admin", true);
+
+  const response = await request(app)
+    .patch(`/api/v1/admin/users/${admin.userId}/deactivate`)
+    .set("Cookie", admin.accessCookie)
+    .set("X-CSRF-Token", admin.csrfToken);
+
+  expect(response.status).toBe(400);
+  expect(response.body.error.code).toBe("CANNOT_DEACTIVATE_SELF");
+
+  const user = await prisma.user.findUniqueOrThrow({
+    where: { id: admin.userId },
+  });
+
+  expect(user.status).toBe("ACTIVE");
+});
+
+it("rejects account management by non-admin users", async () => {
+  const user = await createLoggedInUser("account-management-user");
+  const target = await createLoggedInUser("account-management-target");
+
+  const deactivateResponse = await request(app)
+    .patch(`/api/v1/admin/users/${target.userId}/deactivate`)
+    .set("Cookie", user.accessCookie)
+    .set("X-CSRF-Token", user.csrfToken);
+
+  const reactivateResponse = await request(app)
+    .patch(`/api/v1/admin/users/${target.userId}/reactivate`)
+    .set("Cookie", user.accessCookie)
+    .set("X-CSRF-Token", user.csrfToken);
+
+  expect(deactivateResponse.status).toBe(403);
+  expect(reactivateResponse.status).toBe(403);
+
+  const targetAfter = await prisma.user.findUniqueOrThrow({
+    where: { id: target.userId },
+  });
+
+  expect(targetAfter.status).toBe("ACTIVE");
+});
+
+it("rejects account management without a CSRF token", async () => {
+  const admin = await createLoggedInUser("csrf-account-admin", true);
+  const target = await createLoggedInUser("csrf-account-target");
+
+  const response = await request(app)
+    .patch(`/api/v1/admin/users/${target.userId}/deactivate`)
+    .set("Cookie", admin.accessCookie);
+
+  expect(response.status).toBe(403);
+
+  const targetAfter = await prisma.user.findUniqueOrThrow({
+    where: { id: target.userId },
+  });
+
+  expect(targetAfter.status).toBe("ACTIVE");
+});
+
+it("handles repeated deactivation requests idempotently", async () => {
+  const admin = await createLoggedInUser("repeat-deactivate-admin", true);
+  const target = await createLoggedInUser("repeat-deactivate-target");
+
+  const deactivate = () =>
+    request(app)
+      .patch(`/api/v1/admin/users/${target.userId}/deactivate`)
+      .set("Cookie", admin.accessCookie)
+      .set("X-CSRF-Token", admin.csrfToken);
+
+  const first = await deactivate();
+  const second = await deactivate();
+
+  expect(first.status).toBe(200);
+  expect(second.status).toBe(200);
+  expect(second.body.data.user.status).toBe("DISABLED");
+
+  const user = await prisma.user.findUniqueOrThrow({
+    where: { id: target.userId },
+  });
+
+  expect(user.status).toBe("DISABLED");
+});
+
+it("handles repeated reactivation requests idempotently", async () => {
+  const admin = await createLoggedInUser("repeat-reactivate-admin", true);
+  const target = await createLoggedInUser("repeat-reactivate-target");
+
+  const deactivate = await request(app)
+    .patch(`/api/v1/admin/users/${target.userId}/deactivate`)
+    .set("Cookie", admin.accessCookie)
+    .set("X-CSRF-Token", admin.csrfToken);
+
+  expect(deactivate.status).toBe(200);
+
+  const reactivate = () =>
+    request(app)
+      .patch(`/api/v1/admin/users/${target.userId}/reactivate`)
+      .set("Cookie", admin.accessCookie)
+      .set("X-CSRF-Token", admin.csrfToken);
+
+  const first = await reactivate();
+  const second = await reactivate();
+
+  expect(first.status).toBe(200);
+  expect(second.status).toBe(200);
+  expect(second.body.data.user.status).toBe("ACTIVE");
+
+  const user = await prisma.user.findUniqueOrThrow({
+    where: { id: target.userId },
+  });
+
+  expect(user.status).toBe("ACTIVE");
 });
