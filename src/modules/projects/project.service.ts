@@ -28,7 +28,14 @@ export async function createProject(
 
 export async function listProjects(ownerId: string, query: ListProjectsQuery) {
   const where = {
-    ownerId,
+    OR: [
+      { ownerId },
+      {
+        memberships: {
+          some: { userId: ownerId },
+        },
+      },
+    ],
     archivedAt: query.archived ? { not: null } : null,
   };
 
@@ -65,7 +72,14 @@ export async function getProject(ownerId: string, projectId: string) {
   return prisma.project.findFirst({
     where: {
       id: projectId,
-      ownerId,
+      OR: [
+        { ownerId },
+        {
+          memberships: {
+            some: { userId: ownerId },
+          },
+        },
+      ],
     },
     select: {
       id: true,

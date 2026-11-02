@@ -200,36 +200,57 @@ describe("GET /api/v1/projects", () => {
     expect(response.body.error.code).toBe("UNAUTHENTICATED");
   });
 
-  it("returns only projects owned by the authenticated user", async () => {
+  it("returns projects owned by or shared with the authenticated user", async () => {
     const owner = await createLoggedInUser();
+    const member = await createLoggedInUser();
     const anotherUser = await createLoggedInUser();
 
-    await prisma.project.create({
+    const ownedProject = await prisma.project.create({
+      data: {
+        ownerId: member.userId,
+        name: "Owned Project",
+      },
+    });
+
+    const sharedProject = await prisma.project.create({
       data: {
         ownerId: owner.userId,
-        name: "Owner Project",
+        name: "Shared Project",
+        memberships: {
+          create: {
+            userId: member.userId,
+          },
+        },
       },
     });
 
     await prisma.project.create({
       data: {
         ownerId: anotherUser.userId,
-        name: "Another User Project",
+        name: "Unrelated Project",
       },
     });
 
     const response = await request(app)
       .get("/api/v1/projects")
-      .set("Cookie", owner.accessCookie);
+      .set("Cookie", member.accessCookie);
 
     expect(response.status).toBe(200);
-    expect(response.body.data).toHaveLength(1);
-    expect(response.body.data[0].name).toBe("Owner Project");
-    expect(response.body.data[0]).not.toHaveProperty("ownerId");
+    expect(response.body.data).toHaveLength(2);
+    expect(
+      response.body.data.map((project: { id: string }) => project.id),
+    ).toContain(ownedProject.id);
+    expect(
+      response.body.data.map((project: { id: string }) => project.id),
+    ).toContain(sharedProject.id);
+    expect(
+      response.body.data.map((project: { name: string }) => project.name),
+    ).not.toContain("Unrelated Project");
+
     expect(response.body.pagination).toMatchObject({
       page: 1,
       limit: 10,
-      totalItems: 1,
+      totalItems: 2,
       totalPages: 1,
     });
   });
@@ -425,6 +446,77 @@ describe("GET /api/v1/projects/:projectId", () => {
 
     expect(response.status).toBe(400);
     expect(response.body.error.code).toBe("VALIDATION_ERROR");
+  });
+  it("allows an active project member to view project details", async () => {
+    const owner = await createLoggedInUser();
+    const member = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "Shared Project",
+        description: "Visible to project members.",
+        memberships: {
+          create: {
+            userId: member.userId,
+          },
+        },
+      },
+    });
+
+    const response = await request(app)
+      .get(`/api/v1/projects/${project.id}`)
+      .set("Cookie", member.accessCookie);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toMatchObject({
+      id: project.id,
+      name: "Shared Project",
+      description: "Visible to project members.",
+      archivedAt: null,
+    });
+  });
+  it("revokes project visibility when a member is removed", async () => {
+    const owner = await createLoggedInUser();
+    const member = await createLoggedInUser();
+
+    const project = await prisma.project.create({
+      data: {
+        ownerId: owner.userId,
+        name: "Membership Removal Test",
+        memberships: {
+          create: {
+            userId: member.userId,
+          },
+        },
+      },
+    });
+
+    const membership = await prisma.projectMembership.findUniqueOrThrow({
+      where: {
+        projectId_userId: {
+          projectId: project.id,
+          userId: member.userId,
+        },
+      },
+    });
+
+    const beforeRemoval = await request(app)
+      .get(`/api/v1/projects/${project.id}`)
+      .set("Cookie", member.accessCookie);
+
+    expect(beforeRemoval.status).toBe(200);
+
+    await prisma.projectMembership.delete({
+      where: { id: membership.id },
+    });
+
+    const afterRemoval = await request(app)
+      .get(`/api/v1/projects/${project.id}`)
+      .set("Cookie", member.accessCookie);
+
+    expect(afterRemoval.status).toBe(404);
+    expect(afterRemoval.body.error.code).toBe("NOT_FOUND");
   });
 });
 
