@@ -14,7 +14,8 @@
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
     "db:logs": "docker compose logs -f db",
-    "test:api": "newman run postman/TaskFlow.postman_collection.json"
+    "test:api": "newman run postman/TaskFlow.postman_collection.json",
+    "test:scripts": "tsx scripts/test-b2-storage.ts"
   },
   "keywords": [],
   "author": "",

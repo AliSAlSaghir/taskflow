@@ -355,6 +355,45 @@ describe("Task attachments", () => {
     );
   });
 
+  it("cleans up the uploaded object when saving attachment metadata fails", async () => {
+    const owner = await createLoggedInUser();
+    const project = await createProject(owner.userId);
+    const task = await createTask(project.id);
+
+    const attachmentCreateSpy = vi
+      .spyOn(prisma.attachment, "create")
+      .mockRejectedValueOnce(new Error("Simulated database failure"));
+
+    let response;
+
+    try {
+      response = await request(app)
+        .post(`/api/v1/projects/${project.id}/tasks/${task.id}/attachments`)
+        .set("Cookie", owner.accessCookie)
+        .set("X-CSRF-Token", owner.csrfToken)
+        .attach("file", fileContents, {
+          filename: "notes.txt",
+          contentType: "text/plain",
+        });
+    } finally {
+      attachmentCreateSpy.mockRestore();
+    }
+
+    expect(response.status).toBe(500);
+
+    expect(uploadObject).toHaveBeenCalledOnce();
+    expect(deleteObject).toHaveBeenCalledOnce();
+
+    const uploadedKey = vi.mocked(uploadObject).mock.calls[0]?.[0];
+
+    expect(uploadedKey).toMatch(/^attachments\//);
+    expect(deleteObject).toHaveBeenCalledWith(uploadedKey);
+
+    expect(await prisma.attachment.count({ where: { taskId: task.id } })).toBe(
+      0,
+    );
+  });
+
   it("allows a project owner to list task attachments", async () => {
     const owner = await createLoggedInUser();
     const project = await createProject(owner.userId);
@@ -443,6 +482,41 @@ describe("Task attachments", () => {
     );
   });
 
+  it("returns a storage error when downloading an attachment fails", async () => {
+    const owner = await createLoggedInUser();
+    const project = await createProject(owner.userId);
+    const task = await createTask(project.id);
+
+    const upload = await request(app)
+      .post(`/api/v1/projects/${project.id}/tasks/${task.id}/attachments`)
+      .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken)
+      .attach("file", fileContents, {
+        filename: "notes.txt",
+        contentType: "text/plain",
+      });
+
+    expect(upload.status).toBe(201);
+
+    vi.mocked(downloadObject).mockRejectedValueOnce(
+      new Error("Simulated storage failure"),
+    );
+
+    const response = await request(app)
+      .get(
+        `/api/v1/projects/${project.id}/tasks/${task.id}/attachments/${upload.body.data.id}`,
+      )
+      .set("Cookie", owner.accessCookie);
+
+    expect(response.status).toBe(502);
+    expect(response.body.error.code).toBe("ATTACHMENT_STORAGE_ERROR");
+    expect(response.body.error.message).not.toContain(
+      "Simulated storage failure",
+    );
+
+    expect(downloadObject).toHaveBeenCalledOnce();
+  });
+
   it("allows a project owner to delete an attachment", async () => {
     const owner = await createLoggedInUser();
     const project = await createProject(owner.userId);
@@ -484,6 +558,45 @@ describe("Task attachments", () => {
         where: { id: attachmentId },
       }),
     ).toBeNull();
+  });
+
+  it("keeps the attachment record when storage deletion fails", async () => {
+    const owner = await createLoggedInUser();
+    const project = await createProject(owner.userId);
+    const task = await createTask(project.id);
+
+    const upload = await request(app)
+      .post(`/api/v1/projects/${project.id}/tasks/${task.id}/attachments`)
+      .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken)
+      .attach("file", fileContents, {
+        filename: "notes.txt",
+        contentType: "text/plain",
+      });
+
+    expect(upload.status).toBe(201);
+
+    const attachmentId = upload.body.data.id as string;
+
+    vi.mocked(deleteObject).mockRejectedValueOnce(
+      new Error("Simulated storage deletion failure"),
+    );
+
+    const response = await request(app)
+      .delete(
+        `/api/v1/projects/${project.id}/tasks/${task.id}/attachments/${attachmentId}`,
+      )
+      .set("Cookie", owner.accessCookie)
+      .set("X-CSRF-Token", owner.csrfToken);
+
+    expect(response.status).toBe(502);
+    expect(response.body.error.code).toBe("ATTACHMENT_STORAGE_ERROR");
+
+    expect(
+      await prisma.attachment.findUnique({
+        where: { id: attachmentId },
+      }),
+    ).not.toBeNull();
   });
 
   it("allows an active project member to list attachments", async () => {
