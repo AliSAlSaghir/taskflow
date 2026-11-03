@@ -656,6 +656,20 @@ describe("Admin project inspection", () => {
   });
   it("paginates project listings", async () => {
     const admin = await createLoggedInUser("admin-project-pagination", true);
+    const owner = await createLoggedInUser("admin-project-pagination-owner");
+
+    await prisma.project.createMany({
+      data: [
+        {
+          ownerId: owner.userId,
+          name: "Pagination Project One",
+        },
+        {
+          ownerId: owner.userId,
+          name: "Pagination Project Two",
+        },
+      ],
+    });
 
     const response = await request(app)
       .get("/api/v1/admin/projects?page=1&limit=2")
