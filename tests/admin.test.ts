@@ -270,18 +270,22 @@ describe("Admin user inspection", () => {
   it("paginates user listings", async () => {
     const admin = await createLoggedInUser("admin-pagination", true);
 
+    await createLoggedInUser("admin-pagination-user-1");
+    await createLoggedInUser("admin-pagination-user-2");
+
     const response = await request(app)
       .get("/api/v1/admin/users?page=1&limit=2")
       .set("Cookie", admin.accessCookie);
 
     expect(response.status).toBe(200);
     expect(response.body.data).toHaveLength(2);
+
     expect(response.body.pagination).toMatchObject({
       page: 1,
       limit: 2,
     });
-    expect(response.body.pagination.totalItems).toBeGreaterThanOrEqual(2);
-    expect(response.body.pagination.totalPages).toBeGreaterThanOrEqual(1);
+
+    expect(response.body.pagination.totalItems).toBeGreaterThanOrEqual(3);
   });
 
   it("rejects invalid pagination parameters", async () => {
